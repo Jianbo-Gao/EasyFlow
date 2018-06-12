@@ -40,10 +40,6 @@ var (
 var taint_stack TaintStack
 var taint_memory TaintMemory
 
-const SAFE_FLAG int = 0
-const CALLDATA_FLAG int = 1
-const OVERFLOW_FLAG int = 1 << 1
-
 func taintJPrint() {
 	fmt.Println()
 	taint_stack.JPrint()
