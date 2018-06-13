@@ -46,10 +46,11 @@ type Config struct {
 // The Interpreter will run the byte code VM based on the passed
 // configuration.
 type Interpreter struct {
-	evm      *EVM
-	cfg      Config
-	gasTable params.GasTable
-	intPool  *intPool
+	evm          *EVM
+	cfg          Config
+	gasTable     params.GasTable
+	intPool      *intPool
+	taintIntPool *TaintIntPool
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
@@ -121,6 +122,9 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		op    OpCode        // current opcode
 		mem   = NewMemory() // bound memory
 		stack = newstack()  // local stack
+
+		taint_mem   = NewTaintMemory()
+		taint_stack = newtaintstack()
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
 		// to be uint256. Practically much less so feasible.
@@ -199,7 +203,7 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		}
 
 		// execute the operation
-		res, err := operation.execute(&pc, in.evm, contract, mem, stack)
+		res, err := operation.execute(&pc, in.evm, contract, mem, stack, taint_mem, taint_stack)
 		// verifyPool is a build flag. Pool verification makes sure the integrity
 		// of the integer pool by comparing values to a default value.
 		if verifyPool {
