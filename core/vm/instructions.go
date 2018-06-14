@@ -45,16 +45,25 @@ func taintJPrint(taint_memory *TaintMemory, taint_stack *TaintStack) {
 
 func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, error) {
 	x, y := stack.pop(), stack.peek()
+	temp_x := new(big.Int).Set(x)
+	//temp_y := new(big.Int).Set(y)
 	math.U256(y.Add(x, y))
 
 	evm.interpreter.intPool.put(x)
 
-	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if tx|ty > SAFE_FLAG {
-		taint_stack.push(POTENTIAL_OVERFLOW_FLAG)
-	} else {
-		taint_stack.push(SAFE_FLAG)
+	temp_res := new(big.Int).Set(y)
+	temp_flag := SAFE_FLAG
+
+	if temp_res.Cmp(temp_x) < 0 {
+		temp_flag |= OVERFLOW_FLAG
 	}
+
+	tx, ty := taint_stack.pop(), taint_stack.pop()
+	if (tx|ty)&CALLDATA_FLAG > 0 {
+		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+	}
+
+	taint_stack.push(temp_flag)
 
 	evm.interpreter.taintIntPool.put(tx)
 
@@ -64,16 +73,25 @@ func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, error) {
 	x, y := stack.pop(), stack.peek()
+	temp_x := new(big.Int).Set(x)
+	temp_y := new(big.Int).Set(y)
 	math.U256(y.Sub(x, y))
 
 	evm.interpreter.intPool.put(x)
 
-	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if tx|ty > SAFE_FLAG {
-		taint_stack.push(POTENTIAL_OVERFLOW_FLAG)
-	} else {
-		taint_stack.push(SAFE_FLAG)
+	//temp_res := new(big.Int).Set(y)
+	temp_flag := SAFE_FLAG
+
+	if temp_y.Cmp(temp_x) > 0 {
+		temp_flag |= OVERFLOW_FLAG
 	}
+
+	tx, ty := taint_stack.pop(), taint_stack.pop()
+	if (tx|ty)&CALLDATA_FLAG > 0 {
+		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+	}
+
+	taint_stack.push(temp_flag)
 
 	evm.interpreter.taintIntPool.put(tx)
 
@@ -83,16 +101,25 @@ func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opMul(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, error) {
 	x, y := stack.pop(), stack.pop()
+	temp_x := new(big.Int).Set(x)
+	temp_y := new(big.Int).Set(y)
 	stack.push(math.U256(x.Mul(x, y)))
 
 	evm.interpreter.intPool.put(y)
 
-	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if tx|ty > SAFE_FLAG {
-		taint_stack.push(POTENTIAL_OVERFLOW_FLAG)
-	} else {
-		taint_stack.push(SAFE_FLAG)
+	temp_res := new(big.Int).Set(x)
+	temp_flag := SAFE_FLAG
+
+	if math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
+		temp_flag |= OVERFLOW_FLAG
 	}
+
+	tx, ty := taint_stack.pop(), taint_stack.pop()
+	if (tx|ty)&CALLDATA_FLAG > 0 {
+		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+	}
+
+	taint_stack.push(temp_flag)
 
 	evm.interpreter.taintIntPool.put(ty)
 
@@ -109,12 +136,9 @@ func opDiv(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	}
 	evm.interpreter.intPool.put(x)
 
-	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if tx|ty > SAFE_FLAG {
-		taint_stack.push(POTENTIAL_OVERFLOW_FLAG)
-	} else {
-		taint_stack.push(SAFE_FLAG)
-	}
+	// solidity div cannot overflow
+	tx, _ := taint_stack.pop(), taint_stack.pop()
+	taint_stack.push(SAFE_FLAG)
 	evm.interpreter.taintIntPool.put(tx)
 	taintJPrint(taint_memory, taint_stack)
 	return nil, nil
@@ -473,6 +497,7 @@ func opCaller(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 func opCallValue(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, error) {
 	stack.push(evm.interpreter.intPool.get().Set(contract.value))
 
+	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
 	taintJPrint(taint_memory, taint_stack)
 	return nil, nil
@@ -495,6 +520,7 @@ func opCallDataLoad(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 func opCallDataSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, error) {
 	stack.push(evm.interpreter.intPool.get().SetInt64(int64(len(contract.Input))))
 
+	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
 	taintJPrint(taint_memory, taint_stack)
 	return nil, nil
@@ -900,7 +926,9 @@ func opReturn(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 		taint_flag = taint_flag | taint_ret[i]
 	}
 
-	if taint_flag&POTENTIAL_OVERFLOW_FLAG > 0 {
+	if taint_flag&OVERFLOW_FLAG > 0 {
+		fmt.Println("output: overflow")
+	} else if taint_flag&POTENTIAL_OVERFLOW_FLAG > 0 {
 		fmt.Println("output: potential overflow")
 	} else {
 		fmt.Println("output: safe")

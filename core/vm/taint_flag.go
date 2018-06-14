@@ -6,3 +6,4 @@ package vm
 const SAFE_FLAG int = 0
 const CALLDATA_FLAG int = 1
 const POTENTIAL_OVERFLOW_FLAG int = 1 << 1
+const OVERFLOW_FLAG int = 1 << 2
