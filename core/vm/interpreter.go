@@ -75,6 +75,10 @@ func NewInterpreter(evm *EVM, cfg Config) *Interpreter {
 		}
 	}
 
+	// added for full instruction supporting
+	// set default: IsConstantinople
+	cfg.JumpTable = constantinopleInstructionSet
+
 	return &Interpreter{
 		evm:          evm,
 		cfg:          cfg,

@@ -475,6 +475,7 @@ func opSha3(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 
 func opAddress(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	stack.push(contract.Address().Big())
+	taint_stack.push(SAFE_FLAG)
 	return nil, nil, nil
 }
 
@@ -540,6 +541,9 @@ func opCallDataCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 
 func opReturnDataSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	stack.push(evm.interpreter.intPool.get().SetUint64(uint64(len(evm.interpreter.returnData))))
+	evm.interpreter.taintIntPool.get()
+	taint_stack.push(SAFE_FLAG)
+	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -565,6 +569,8 @@ func opExtCodeSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 	slot := stack.peek()
 	slot.SetUint64(uint64(evm.StateDB.GetCodeSize(common.BigToAddress(slot))))
 
+	taint_stack.pop()
+	taint_stack.push(SAFE_FLAG)
 	return nil, nil, nil
 }
 
@@ -767,6 +773,9 @@ func opMsize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 
 func opGas(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	stack.push(evm.interpreter.intPool.get().SetUint64(contract.Gas))
+
+	evm.interpreter.taintIntPool.get()
+	taint_stack.push(SAFE_FLAG)
 	return nil, nil, nil
 }
 
@@ -807,9 +816,13 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 func opCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	// Pop gas. The actual gas in in evm.callGasTemp.
 	evm.interpreter.intPool.put(stack.pop())
+	evm.interpreter.taintIntPool.put(taint_stack.pop())
+
 	gas := evm.callGasTemp
 	// Pop other call parameters.
 	addr, value, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
+	t1, t2, t3, t4, t5, t6 := taint_stack.pop(), taint_stack.pop(), taint_stack.pop(), taint_stack.pop(), taint_stack.pop(), taint_stack.pop()
+
 	toAddr := common.BigToAddress(addr)
 	value = math.U256(value)
 	// Get the arguments from the memory.
@@ -822,16 +835,22 @@ func opCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	ret, returnFlag, returnGas, err := evm.Call(contract, toAddr, args, gas, value)
 	if err != nil {
 		stack.push(evm.interpreter.intPool.getZero())
+		taint_stack.push(evm.interpreter.taintIntPool.getZero())
 	} else {
 		stack.push(evm.interpreter.intPool.get().SetUint64(1))
+		evm.interpreter.taintIntPool.get()
+		taint_stack.push(SAFE_FLAG)
 	}
 	if err == nil || err == errExecutionReverted {
 		memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
+		taint_memory.Set(retOffset.Uint64(), retSize.Uint64(), returnFlag)
 	}
 	contract.Gas += returnGas
 
 	evm.interpreter.intPool.put(addr, value, inOffset, inSize, retOffset, retSize)
-	// TODO
+	evm.interpreter.taintIntPool.put(t1, t2, t3, t4, t5, t6)
+
+	taintJPrint(taint_memory, taint_stack)
 	return ret, returnFlag, nil
 }
 
@@ -1014,9 +1033,7 @@ func makePush(size uint64, pushByteSize int) executionFunc {
 		*pc += size
 
 		evm.interpreter.taintIntPool.get()
-		for i := 0; i < pushByteSize; i++ {
-			taint_stack.push(SAFE_FLAG)
-		}
+		taint_stack.push(SAFE_FLAG)
 		taintJPrint(taint_memory, taint_stack)
 		return nil, nil, nil
 	}

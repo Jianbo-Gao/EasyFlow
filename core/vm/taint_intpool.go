@@ -46,9 +46,9 @@ func (p *TaintIntPool) put(is ...int) {
 	for _, i := range is {
 		// verifyPool is a build flag. Pool verification makes sure the integrity
 		// of the integer pool by comparing values to a default value.
-		//if verifyPool {
-		//	i.Set(checkVal)
-		//}
+		if verifyPool {
+			i = SAFE_FLAG
+		}
 		p.pool.push(i)
 	}
 }
