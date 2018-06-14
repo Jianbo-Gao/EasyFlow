@@ -54,6 +54,7 @@ type Interpreter struct {
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
+	returnFlag []int  // Last CALL's return flag for subsequent reuse
 }
 
 // NewInterpreter returns a new instance of the Interpreter.
@@ -105,7 +106,7 @@ func (in *Interpreter) enforceRestrictions(op OpCode, operation operation, stack
 // It's important to note that any errors returned by the interpreter should be
 // considered a revert-and-consume-all-gas operation except for
 // errExecutionReverted which means revert-and-keep-gas-left.
-func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err error) {
+func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, taintFlag []int, err error) {
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
@@ -113,10 +114,11 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 	// Reset the previous call's return data. It's unimportant to preserve the old buffer
 	// as every returning call will return new data anyway.
 	in.returnData = nil
+	in.returnFlag = nil
 
 	// Don't bother with the execution if there's no code.
 	if len(contract.Code) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var (
@@ -164,14 +166,14 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		op = contract.GetOp(pc)
 		operation := in.cfg.JumpTable[op]
 		if !operation.valid {
-			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
+			return nil, nil, fmt.Errorf("invalid opcode 0x%x", int(op))
 		}
 		if err := operation.validateStack(stack); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// If the operation is valid, enforce and write restrictions
 		if err := in.enforceRestrictions(op, operation, stack); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		var memorySize uint64
@@ -180,19 +182,19 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		if operation.memorySize != nil {
 			memSize, overflow := bigUint64(operation.memorySize(stack))
 			if overflow {
-				return nil, errGasUintOverflow
+				return nil, nil, errGasUintOverflow
 			}
 			// memory is expanded in words of 32 bytes. Gas
 			// is also calculated in words.
 			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
-				return nil, errGasUintOverflow
+				return nil, nil, errGasUintOverflow
 			}
 		}
 		// consume the gas and return an error if not enough gas is available.
 		// cost is explicitly set so that the capture state defer method can get the proper cost
 		cost, err = operation.gasCost(in.gasTable, in.evm, contract, stack, mem, memorySize)
 		if err != nil || !contract.UseGas(cost) {
-			return nil, ErrOutOfGas
+			return nil, nil, ErrOutOfGas
 		}
 		if memorySize > 0 {
 			mem.Resize(memorySize)
@@ -204,7 +206,7 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		}
 
 		// execute the operation
-		res, err := operation.execute(&pc, in.evm, contract, mem, stack, taint_mem, taint_stack)
+		res, taintFlag, err := operation.execute(&pc, in.evm, contract, mem, stack, taint_mem, taint_stack)
 		// verifyPool is a build flag. Pool verification makes sure the integrity
 		// of the integer pool by comparing values to a default value.
 		if verifyPool {
@@ -214,18 +216,19 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, err er
 		// set the last return to the result of the operation.
 		if operation.returns {
 			in.returnData = res
+			in.returnFlag = taintFlag
 		}
 
 		switch {
 		case err != nil:
-			return nil, err
+			return nil, nil, err
 		case operation.reverts:
-			return res, errExecutionReverted
+			return res, taintFlag, errExecutionReverted
 		case operation.halts:
-			return res, nil
+			return res, taintFlag, nil
 		case !operation.jumps:
 			pc++
 		}
 	}
-	return nil, nil
+	return nil, nil, nil
 }
