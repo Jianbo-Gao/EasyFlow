@@ -75,10 +75,11 @@ func NewInterpreter(evm *EVM, cfg Config) *Interpreter {
 	}
 
 	return &Interpreter{
-		evm:      evm,
-		cfg:      cfg,
-		gasTable: evm.ChainConfig().GasTable(evm.BlockNumber),
-		intPool:  newIntPool(),
+		evm:          evm,
+		cfg:          cfg,
+		gasTable:     evm.ChainConfig().GasTable(evm.BlockNumber),
+		intPool:      newIntPool(),
+		taintIntPool: newTaintIntPool(),
 	}
 }
 

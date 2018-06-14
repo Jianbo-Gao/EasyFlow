@@ -42,12 +42,8 @@ func (st *TaintStack) swap(n int) {
 	st.data[st.len()-n], st.data[st.len()-1] = st.data[st.len()-1], st.data[st.len()-n]
 }
 
-// func (st *TaintStack) dup(pool *intPool, n int) {
-// 	st.push(pool.get().Set(st.data[st.len()-n]))
-// }
-
-func (st *TaintStack) dup(n int) {
-	// TODO: intPool
+func (st *TaintStack) dup(pool *TaintIntPool, n int) {
+	pool.get()
 	st.push(st.data[st.len()-n])
 }
 
