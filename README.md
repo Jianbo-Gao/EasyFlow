@@ -1,3 +1,29 @@
+## EVM (cumtomised version)
+
+A cumtomised evm tool to detect overflow vulnerabilities of Ethereum contracts.
+
+Modified based on Official Go Ethereum.
+
+
+## Building the source
+```
+make evm
+```
+And the evm tool will appear in ./build/bin
+
+
+## Using the tool
+potential overflow
+```
+./build/bin/evm --codefile taint_contracts/contract1.bin-runtime --input f40a049d0000000000000000000000000000000000000000000000000000000000000003 --json  run
+```
+overflow
+```
+./build/bin/evm --codefile taint_contracts/contract1.bin-runtime --input f40a049dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff --json  run
+```
+
+---
+
 ## Go Ethereum
 
 Official golang implementation of the Ethereum protocol.
