@@ -19,7 +19,7 @@ geth:
 evm:
 	build/env.sh go run build/ci.go install ./cmd/evm
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/evm\" to launch geth."
+	@echo "Run \"$(GOBIN)/evm\" to launch evm."
 
 swarm:
 	build/env.sh go run build/ci.go install ./cmd/swarm
