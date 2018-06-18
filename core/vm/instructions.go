@@ -83,6 +83,7 @@ func checkExpOverflow(base, exponent *big.Int) bool {
 func checkAddProtection(pc *uint64, contract *Contract) bool {
 	var n = *pc
 	var op OpCode
+	//fmt.Println(contract.GetOp(n))
 	for {
 		op = contract.GetOp(n)
 		if op == JUMP || op == JUMPI || op == JUMPDEST {
@@ -92,13 +93,125 @@ func checkAddProtection(pc *uint64, contract *Contract) bool {
 			break
 		}
 
-		// safemath pattern
-		// c >= a
+		// safemath pattern: contract3.safeadd1
+		// assert(c >= a)
 		if op == DUP4 && contract.GetOp(n+1) == DUP2 && contract.GetOp(n+2) == LT && contract.GetOp(n+3) == ISZERO {
 			return true
 		}
 
+		// safemath pattern: contract3.safeadd2
+		// if(a + b >= a)
+		if op == ADD && contract.GetOp(n+1) == LT && contract.GetOp(n+2) == ISZERO {
+			return true
+		}
+
 		n++
+	}
+
+	n = *pc
+	for {
+		op = contract.GetOp(n)
+		if op == JUMP || op == JUMPI || op == JUMPDEST {
+			break
+		}
+		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
+			break
+		}
+
+		// safemath pattern: contract3.safeadd2
+		// if(a + b >= a)
+		if op == ADD && contract.GetOp(n+1) == LT && contract.GetOp(n+2) == ISZERO {
+			return true
+		}
+
+		// safemath pattern: contract3.safeadd3
+		// if (a > MAX_UINT256 - b) throw;
+		if op == ADD && contract.GetOp(n-15) == SUB && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == GT && contract.GetOp(n-12) == ISZERO {
+			return true
+		}
+
+		n--
+	}
+	return false
+}
+
+func checkSubProtection(pc *uint64, contract *Contract) bool {
+	var n = *pc
+	var op OpCode
+	//fmt.Println(contract.GetOp(n))
+
+	n = *pc
+	for {
+		op = contract.GetOp(n)
+		if op == JUMP || op == JUMPI || op == JUMPDEST {
+			break
+		}
+		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
+			break
+		}
+
+		// safemath pattern: contract4.safesub1
+		// assert(b<=a)
+		if op == SUB && contract.GetOp(n-14) == DUP3 && contract.GetOp(n-13) == DUP3 && contract.GetOp(n-12) == GT && contract.GetOp(n-11) == ISZERO {
+			return true
+		}
+
+		// safemath pattern: contract4.safesub2
+		// if(a>=b)
+		if op == SUB && contract.GetOp(n-11) == DUP2 && contract.GetOp(n-10) == DUP4 && contract.GetOp(n-9) == LT && contract.GetOp(n-8) == ISZERO {
+			return true
+		}
+
+		// safemath pattern: contract4.safesub2
+		// if (a < b) throw;
+		if op == SUB && contract.GetOp(n-15) == DUP2 && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == LT && contract.GetOp(n-12) == ISZERO {
+			return true
+		}
+
+		n--
+	}
+	return false
+}
+
+func checkMulProtection(pc *uint64, contract *Contract) bool {
+	var n = *pc
+	var op OpCode
+	//fmt.Println(contract.GetOp(n))
+	for {
+		op = contract.GetOp(n)
+		if op == JUMP || op == JUMPI || op == JUMPDEST {
+			break
+		}
+		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
+			break
+		}
+
+		// safemath pattern: contract5.safemul1
+		// assert(a == 0 || c / a == b);
+		if op == PUSH1 && contract.GetOp(n+2) == DUP5 && contract.GetOp(n+3) == EQ && contract.GetOp(n+22) == DIV && contract.GetOp(n+23) == EQ {
+			return true
+		}
+
+		n++
+	}
+
+	n = *pc
+	for {
+		op = contract.GetOp(n)
+		if op == JUMP || op == JUMPI || op == JUMPDEST {
+			break
+		}
+		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
+			break
+		}
+
+		// safemath pattern: contract5.safemul2
+		// if (x > MAX_UINT256 / y) throw;
+		if op == MUL && contract.GetOp(n-15) == DIV && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == GT && contract.GetOp(n-12) == ISZERO {
+			return true
+		}
+
+		n--
 	}
 	return false
 }
@@ -150,9 +263,16 @@ func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	if (tx|ty)&CALLDATA_FLAG > 0 {
 		if temp_y.Cmp(temp_x) > 0 {
-			temp_flag |= OVERFLOW_FLAG
+			if checkSubProtection(pc, contract) {
+				temp_flag |= PROTECTED_OVERFLOW_FLAG
+				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
+			} else {
+				temp_flag |= OVERFLOW_FLAG
+				global_taint_flag |= OVERFLOW_FLAG
+			}
 		}
 		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 	}
 
 	taint_stack.push(temp_flag)
@@ -175,10 +295,17 @@ func opMul(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-			temp_flag |= OVERFLOW_FLAG
+		if temp_y.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
+			if checkMulProtection(pc, contract) {
+				temp_flag |= PROTECTED_OVERFLOW_FLAG
+				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
+			} else {
+				temp_flag |= OVERFLOW_FLAG
+				global_taint_flag |= OVERFLOW_FLAG
+			}
 		}
 		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 	}
 
 	taint_stack.push(temp_flag)
@@ -282,8 +409,10 @@ func opExp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	if (tx|ty)&CALLDATA_FLAG > 0 {
 		if checkExpOverflow(temp_x, temp_y) {
 			temp_flag |= OVERFLOW_FLAG
+			global_taint_flag |= OVERFLOW_FLAG
 		}
 		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 	}
 
 	taint_stack.push(temp_flag)
@@ -506,11 +635,20 @@ func opAddmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 
 		if (tx|ty)&CALLDATA_FLAG > 0 {
 			if temp_res.Cmp(temp_x) < 0 || temp_res.Cmp(temp_y) < 0 {
-				temp_flag |= OVERFLOW_FLAG
+				if checkAddProtection(pc, contract) {
+					temp_flag |= PROTECTED_OVERFLOW_FLAG
+					global_taint_flag |= PROTECTED_OVERFLOW_FLAG
+				} else {
+					temp_flag |= OVERFLOW_FLAG
+					global_taint_flag |= OVERFLOW_FLAG
+				}
 			}
 			temp_flag |= POTENTIAL_OVERFLOW_FLAG
+			global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 		}
+
 		taint_stack.push(temp_flag)
+
 	} else {
 		stack.push(x.SetUint64(0))
 
@@ -537,10 +675,17 @@ func opMulmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 		stack.push(math.U256(x))
 
 		if (tx|ty)&CALLDATA_FLAG > 0 {
-			if math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-				temp_flag |= OVERFLOW_FLAG
+			if temp_y.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
+				if checkMulProtection(pc, contract) {
+					temp_flag |= PROTECTED_OVERFLOW_FLAG
+					global_taint_flag |= PROTECTED_OVERFLOW_FLAG
+				} else {
+					temp_flag |= OVERFLOW_FLAG
+					global_taint_flag |= OVERFLOW_FLAG
+				}
 			}
 			temp_flag |= POTENTIAL_OVERFLOW_FLAG
+			global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 		}
 		taint_stack.push(temp_flag)
 	} else {
