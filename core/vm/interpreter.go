@@ -207,6 +207,11 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, taintF
 		if in.cfg.Debug {
 			in.cfg.Tracer.CaptureState(in.evm, pc, op, gasCopy, cost, mem, stack, contract, in.evm.depth, err)
 			logged = true
+
+			// trace taint_stack and taint_mem
+			taint_stack.JPrint()
+			taint_mem.JPrint()
+			fmt.Println()
 		}
 
 		// execute the operation

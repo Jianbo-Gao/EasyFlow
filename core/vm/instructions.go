@@ -37,12 +37,6 @@ var (
 	errMaxCodeSizeExceeded   = errors.New("evm: max code size exceeded")
 )
 
-func taintJPrint(taint_memory *TaintMemory, taint_stack *TaintStack) {
-	fmt.Println()
-	taint_stack.JPrint()
-	taint_memory.JPrint()
-}
-
 func BigPow(a, b int64) *big.Int {
 	r := big.NewInt(a)
 	return r.Exp(r, big.NewInt(b), nil)
@@ -86,6 +80,29 @@ func checkExpOverflow(base, exponent *big.Int) bool {
 	return false
 }
 
+func checkAddProtection(pc *uint64, contract *Contract) bool {
+	var n = *pc
+	var op OpCode
+	for {
+		op = contract.GetOp(n)
+		if op == JUMP || op == JUMPI || op == JUMPDEST {
+			break
+		}
+		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
+			break
+		}
+
+		// safemath pattern
+		// c >= a
+		if op == DUP4 && contract.GetOp(n+1) == DUP2 && contract.GetOp(n+2) == LT && contract.GetOp(n+3) == ISZERO {
+			return true
+		}
+
+		n++
+	}
+	return false
+}
+
 func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y := stack.pop(), stack.peek()
 	temp_x := new(big.Int).Set(x)
@@ -100,16 +117,22 @@ func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	if (tx|ty)&CALLDATA_FLAG > 0 {
 		if temp_res.Cmp(temp_x) < 0 || temp_res.Cmp(temp_y) < 0 {
-			temp_flag |= OVERFLOW_FLAG
+			if checkAddProtection(pc, contract) {
+				temp_flag |= PROTECTED_OVERFLOW_FLAG
+				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
+			} else {
+				temp_flag |= OVERFLOW_FLAG
+				global_taint_flag |= OVERFLOW_FLAG
+			}
 		}
 		temp_flag |= POTENTIAL_OVERFLOW_FLAG
+		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
 	}
 
 	taint_stack.push(temp_flag)
 
 	evm.interpreter.taintIntPool.put(tx)
 
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -136,7 +159,6 @@ func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 	evm.interpreter.taintIntPool.put(tx)
 
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -163,7 +185,6 @@ func opMul(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 	evm.interpreter.taintIntPool.put(ty)
 
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -180,7 +201,6 @@ func opDiv(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -205,7 +225,6 @@ func opSdiv(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	evm.interpreter.taintIntPool.getZero()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -221,7 +240,6 @@ func opMod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -246,7 +264,6 @@ func opSmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	evm.interpreter.taintIntPool.getZero()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -272,7 +289,6 @@ func opExp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	taint_stack.push(temp_flag)
 
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -298,7 +314,6 @@ func opSignExtend(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 	evm.interpreter.intPool.put(back)
 
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -307,7 +322,6 @@ func opNot(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	math.U256(x.Not(x))
 
 	// Nothing to do
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -323,7 +337,6 @@ func opLt(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -339,7 +352,6 @@ func opGt(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -368,7 +380,6 @@ func opSlt(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -397,7 +408,6 @@ func opSgt(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -413,7 +423,6 @@ func opEq(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -426,7 +435,6 @@ func opIszero(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	}
 
 	// taint_stack: nothing to do
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -439,7 +447,6 @@ func opAnd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -452,7 +459,6 @@ func opOr(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -465,7 +471,6 @@ func opXor(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -482,7 +487,6 @@ func opByte(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -515,7 +519,6 @@ func opAddmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	evm.interpreter.intPool.put(y, z)
 
 	evm.interpreter.taintIntPool.put(ty, tz)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -548,7 +551,6 @@ func opMulmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	evm.interpreter.intPool.put(y, z)
 
 	evm.interpreter.taintIntPool.put(ty, tz)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -563,7 +565,6 @@ func opSHL(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 
 	if shift.Cmp(common.Big256) >= 0 {
 		value.SetUint64(0)
@@ -586,7 +587,6 @@ func opSHR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 
 	if shift.Cmp(common.Big256) >= 0 {
 		value.SetUint64(0)
@@ -609,7 +609,6 @@ func opSAR(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 
 	if shift.Cmp(common.Big256) >= 0 {
 		if value.Sign() > 0 {
@@ -648,7 +647,6 @@ func opSha3(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(flag)
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -656,7 +654,6 @@ func opAddress(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 	stack.push(contract.Address().Big())
 
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -666,7 +663,6 @@ func opBalance(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 
 	tx := taint_stack.pop()
 	taint_stack.push(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -674,7 +670,6 @@ func opOrigin(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	stack.push(evm.Origin.Big())
 
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -682,7 +677,6 @@ func opCaller(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	stack.push(contract.Caller().Big())
 
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -691,7 +685,6 @@ func opCallValue(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -706,7 +699,6 @@ func opCallDataLoad(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 	} else {
 		taint_stack.push(CALLDATA_FLAG)
 	}
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -715,7 +707,6 @@ func opCallDataSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -737,7 +728,6 @@ func opCallDataCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 	taint_memory.Set(memOffset.Uint64(), length.Uint64(), t_value)
 
 	evm.interpreter.taintIntPool.put(tx, ty, tz)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -746,7 +736,6 @@ func opReturnDataSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, 
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -771,7 +760,6 @@ func opReturnDataCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, 
 	memory.Set(memOffset.Uint64(), length.Uint64(), evm.interpreter.returnData[dataOffset.Uint64():end.Uint64()])
 
 	taint_memory.Set(memOffset.Uint64(), length.Uint64(), evm.interpreter.returnFlag[dataOffset.Uint64():end.Uint64()])
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -781,7 +769,6 @@ func opExtCodeSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 
 	taint_stack.pop()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -791,7 +778,6 @@ func opCodeSize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -814,7 +800,6 @@ func opCodeCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	taint_memory.Set(memOffset.Uint64(), length.Uint64(), t_value)
 
 	evm.interpreter.taintIntPool.put(tm, tc, tl)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -837,7 +822,6 @@ func opExtCodeCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, sta
 	}
 	taint_memory.Set(memOffset.Uint64(), length.Uint64(), t_value)
 	evm.interpreter.taintIntPool.put(tm, tc, tl)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -846,7 +830,6 @@ func opGasprice(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -870,7 +853,6 @@ func opBlockhash(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 	evm.interpreter.intPool.put(num, n)
 
 	evm.interpreter.taintIntPool.put(t_num, SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -878,7 +860,6 @@ func opCoinbase(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	stack.push(evm.Coinbase.Big())
 
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -887,7 +868,6 @@ func opTimestamp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -896,7 +876,6 @@ func opNumber(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -905,7 +884,6 @@ func opDifficulty(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -914,7 +892,6 @@ func opGasLimit(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -922,7 +899,6 @@ func opPop(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	evm.interpreter.intPool.put(stack.pop())
 
 	evm.interpreter.taintIntPool.put(taint_stack.pop())
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -941,7 +917,6 @@ func opMload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 	}
 	taint_stack.push(flag)
 	evm.interpreter.taintIntPool.put(toffset)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -960,7 +935,6 @@ func opMstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	taint_memory.Resize(mStart.Uint64() + 32)
 	taint_memory.Set(mStart.Uint64(), 32, slice_ty)
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -970,7 +944,6 @@ func opMstore8(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 
 	_, tv := taint_stack.pop(), taint_stack.pop()
 	taint_memory.store[off] = tv
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -982,7 +955,6 @@ func opSload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 	tl := taint_stack.pop()
 	tv := tl
 	taint_stack.push(tv)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -996,7 +968,6 @@ func opSstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	taint_stack.pop()
 	tv := taint_stack.pop()
 	evm.interpreter.taintIntPool.put(tv)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1013,7 +984,6 @@ func opJump(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	evm.interpreter.intPool.put(pos)
 
 	evm.interpreter.taintIntPool.put(tx)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1034,12 +1004,10 @@ func opJumpi(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 	evm.interpreter.intPool.put(pos, cond)
 
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
 func opJumpdest(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1048,7 +1016,6 @@ func opPc(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1057,7 +1024,6 @@ func opMsize(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1066,7 +1032,6 @@ func opGas(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 	evm.interpreter.taintIntPool.get()
 	taint_stack.push(SAFE_FLAG)
-	taintJPrint(taint_memory, taint_stack)
 	return nil, nil, nil
 }
 
@@ -1109,7 +1074,6 @@ func opCreate(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	evm.interpreter.intPool.put(value, offset, size)
 
 	evm.interpreter.taintIntPool.put(tv, to, ts)
-	taintJPrint(taint_memory, taint_stack)
 
 	if suberr == errExecutionReverted {
 		return res, returnFlag, nil
@@ -1155,7 +1119,6 @@ func opCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 	evm.interpreter.intPool.put(addr, value, inOffset, inSize, retOffset, retSize)
 	evm.interpreter.taintIntPool.put(t1, t2, t3, t4, t5, t6)
 
-	taintJPrint(taint_memory, taint_stack)
 	return ret, returnFlag, nil
 }
 
@@ -1199,7 +1162,6 @@ func opCallCode(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack 
 	evm.interpreter.intPool.put(addr, value, inOffset, inSize, retOffset, retSize)
 	evm.interpreter.taintIntPool.put(t1, t2, t3, t4, t5, t6)
 
-	taintJPrint(taint_memory, taint_stack)
 	return ret, returnFlag, nil
 }
 
@@ -1236,7 +1198,6 @@ func opDelegateCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 	evm.interpreter.intPool.put(addr, inOffset, inSize, retOffset, retSize)
 	evm.interpreter.taintIntPool.put(t1, t2, t3, t4, t5)
 
-	taintJPrint(taint_memory, taint_stack)
 	return ret, returnFlag, nil
 }
 
@@ -1273,7 +1234,6 @@ func opStaticCall(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stac
 	evm.interpreter.intPool.put(addr, inOffset, inSize, retOffset, retSize)
 	evm.interpreter.taintIntPool.put(t1, t2, t3, t4, t5)
 
-	taintJPrint(taint_memory, taint_stack)
 	return ret, returnFlag, nil
 }
 
@@ -1286,20 +1246,13 @@ func opReturn(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_ret := taint_memory.GetPtr(offset.Int64(), size.Int64())
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 
 	taint_flag := SAFE_FLAG
 	for i := int64(0); i < size.Int64(); i++ {
 		taint_flag = taint_flag | taint_ret[i]
 	}
 
-	if taint_flag&OVERFLOW_FLAG > 0 {
-		fmt.Println("return: overflow")
-	} else if taint_flag&POTENTIAL_OVERFLOW_FLAG > 0 {
-		fmt.Println("return: potential overflow")
-	} else {
-		fmt.Println("return: safe")
-	}
+	global_taint_flag |= taint_flag
 
 	return ret, taint_ret, nil
 }
@@ -1313,27 +1266,19 @@ func opRevert(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_ret := taint_memory.GetPtr(offset.Int64(), size.Int64())
 	evm.interpreter.taintIntPool.put(tx, ty)
-	taintJPrint(taint_memory, taint_stack)
 
 	taint_flag := SAFE_FLAG
 	for i := int64(0); i < size.Int64(); i++ {
 		taint_flag = taint_flag | taint_ret[i]
 	}
 
-	if taint_flag&OVERFLOW_FLAG > 0 {
-		fmt.Println("revert: overflow")
-	} else if taint_flag&POTENTIAL_OVERFLOW_FLAG > 0 {
-		fmt.Println("revert: potential overflow")
-	} else {
-		fmt.Println("revert: safe")
-	}
+	global_taint_flag |= taint_flag
 
 	return ret, nil, nil
 }
 
 func opStop(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
-	taintJPrint(taint_memory, taint_stack)
-	fmt.Println("stop")
+	// fmt.Println("stop")
 	return nil, nil, nil
 }
 
@@ -1343,8 +1288,7 @@ func opSuicide(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 
 	evm.StateDB.Suicide(contract.Address())
 
-	taintJPrint(taint_memory, taint_stack)
-	fmt.Println("suicide")
+	// fmt.Println("suicide")
 	return nil, nil, nil
 }
 
@@ -1377,7 +1321,7 @@ func makeLog(size int) executionFunc {
 		}
 		memory.Get(mStart.Int64(), mSize.Int64())
 		evm.interpreter.taintIntPool.put(t_mStart, t_mSize)
-		taintJPrint(taint_memory, taint_stack)
+
 		return nil, nil, nil
 	}
 }
@@ -1404,7 +1348,7 @@ func makePush(size uint64, pushByteSize int) executionFunc {
 
 		evm.interpreter.taintIntPool.get()
 		taint_stack.push(SAFE_FLAG)
-		taintJPrint(taint_memory, taint_stack)
+
 		return nil, nil, nil
 	}
 }
@@ -1415,7 +1359,7 @@ func makeDup(size int64) executionFunc {
 		stack.dup(evm.interpreter.intPool, int(size))
 
 		taint_stack.dup(evm.interpreter.taintIntPool, int(size))
-		taintJPrint(taint_memory, taint_stack)
+
 		return nil, nil, nil
 	}
 }
@@ -1428,7 +1372,7 @@ func makeSwap(size int64) executionFunc {
 		stack.swap(int(size))
 
 		taint_stack.swap(int(size))
-		taintJPrint(taint_memory, taint_stack)
+
 		return nil, nil, nil
 	}
 }

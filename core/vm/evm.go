@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -44,6 +45,18 @@ func addFlagInReturn(ret1 []byte, ret2 error) ([]byte, []int, error) {
 		temp_returnFlag = append(temp_returnFlag, SAFE_FLAG)
 	}
 	return ret1, temp_returnFlag, ret2
+}
+
+func printTaintFlag() {
+	if global_taint_flag&OVERFLOW_FLAG > 0 {
+		fmt.Println("taint flag: overflow")
+	} else if global_taint_flag&PROTECTED_OVERFLOW_FLAG > 0 {
+		fmt.Println("taint flag: protected overflow")
+	} else if global_taint_flag&POTENTIAL_OVERFLOW_FLAG > 0 {
+		fmt.Println("taint flag: potential overflow")
+	} else {
+		fmt.Println("taint flag: safe")
+	}
 }
 
 // run runs the given contract and takes care of running precompiles with a fallback to the byte code interpreter.
@@ -192,6 +205,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 		defer func() { // Lazy evaluation of the parameters
 			evm.vmConfig.Tracer.CaptureEnd(ret, gas-contract.Gas, time.Since(start), err)
+			printTaintFlag()
 		}()
 	}
 	ret, taintFlag, err = run(evm, contract, input)
