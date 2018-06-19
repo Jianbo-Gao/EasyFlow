@@ -295,7 +295,7 @@ func opMul(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if temp_y.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
+		if temp_x.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
 			if checkMulProtection(pc, contract) {
 				temp_flag |= PROTECTED_OVERFLOW_FLAG
 				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
@@ -675,7 +675,7 @@ func opMulmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 		stack.push(math.U256(x))
 
 		if (tx|ty)&CALLDATA_FLAG > 0 {
-			if temp_y.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
+			if temp_x.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
 				if checkMulProtection(pc, contract) {
 					temp_flag |= PROTECTED_OVERFLOW_FLAG
 					global_taint_flag |= PROTECTED_OVERFLOW_FLAG
