@@ -1077,7 +1077,7 @@ func opMstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	for i := 0; i < 32; i++ {
 		slice_ty[i] = ty
 	}
-	taint_memory.Resize(mStart.Uint64() + 32)
+	//taint_memory.Resize(mStart.Uint64() + 32)
 	taint_memory.Set(mStart.Uint64(), 32, slice_ty)
 	evm.interpreter.taintIntPool.put(tx, ty)
 	return nil, nil, nil

@@ -202,6 +202,7 @@ func (in *Interpreter) Run(contract *Contract, input []byte) (ret []byte, taintF
 		}
 		if memorySize > 0 {
 			mem.Resize(memorySize)
+			taint_mem.Resize(memorySize)
 		}
 
 		if in.cfg.Debug {
