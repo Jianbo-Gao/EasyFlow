@@ -13,7 +13,7 @@
 # contract3 protected overflow (safeadd2)
 ./build/bin/evm --codefile taint_contracts/contract3.bin-runtime --input b79e70edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000002 --json  run
 
-# contract3 safe (safeadd3)
+# contract3 potential overflow (safeadd3)
 ./build/bin/evm --codefile taint_contracts/contract3.bin-runtime --input 710419abffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000002 --json  run
 
 # contract4 potential overflow (safesub1)

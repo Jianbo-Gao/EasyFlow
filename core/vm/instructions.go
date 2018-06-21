@@ -829,7 +829,7 @@ func opCallValue(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 	stack.push(evm.interpreter.intPool.get().Set(contract.value))
 
 	evm.interpreter.taintIntPool.get()
-	taint_stack.push(SAFE_FLAG)
+	taint_stack.push(CALLDATA_FLAG)
 	return nil, nil, nil
 }
 
