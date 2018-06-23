@@ -7,7 +7,7 @@ import config
 def print_res(id, input_str, last_op, taint_res):
     print("[Tx %s]" % id)
     print("input: %s" % input_str)
-    print("last op: %s" % last_op)
+    #print("last op: %s" % last_op)
     print("result: %s" % taint_res)
     print("")
 
@@ -21,11 +21,25 @@ def run_evm(code_str, input_str):
     taint_res = output_str.splitlines()[-1].strip().split(":")[1][1:]
     return last_op, taint_res
 
+def run_evm_with_value(code_str, input_str):
+    output = os.popen("%s --code %s --input %s --sender 0000000000000000000000000000000000000000 --value \"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\" --prestate genesis-example.json --json run" % (config.EVM_PATH, code_str, input_str))
+    output_str = output.read()
+    line = -3
+    last_op=None
+    while line >= -10:
+        try:
+            last_op = json.loads(output_str.splitlines()[line])["opName"]
+            break
+        except:
+            line -= 1
+    taint_res = output_str.splitlines()[-1].strip().split(":")[1][1:]
+    return last_op, taint_res
+
 def main(code_str, input_str, debug_flag=False):
     last_op, taint_res = run_evm(code_str, input_str)
     debug_flag and print_res(0, input_str, last_op, taint_res)
     if taint_res in ("safe", "overflow", "protected overflow"):
-        print(last_op)
+        #print(last_op)
         print(taint_res)
         if taint_res == "overflow":
             return True, last_op, taint_res, None
@@ -33,6 +47,13 @@ def main(code_str, input_str, debug_flag=False):
             return False, last_op, taint_res, None
 
     elif taint_res == "potential overflow":
+        last_op_with_value, taint_res_with_value = run_evm_with_value(code_str, input_str)
+        debug_flag and print_res("0 with value", input_str, last_op_with_value, taint_res_with_value)
+        if taint_res_with_value == "overflow":
+            #print(last_op_with_value)
+            print("retry: potential overflow triggered")
+            return True, last_op_with_value, taint_res_with_value, None
+
         arg_num = (len(input_str)-8)/64
         input_args = ("0000000000000000000000000000000000000000000000000000000000000000", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
         input_method = input_str[0:8]
@@ -50,18 +71,18 @@ def main(code_str, input_str, debug_flag=False):
             retry_last_op, retry_taint_res = run_evm(code_str, input_str)
             debug_flag and print_res(retry_id, input_str, retry_last_op, retry_taint_res)
             if retry_taint_res == "overflow":
-                print(retry_last_op)
+                #print(retry_last_op)
                 retry_result = "retry: potential overflow triggered"
                 print(retry_result)
                 return True, retry_last_op, retry_result, None
         else:
-            print(last_op)
+            #print(last_op)
             retry_result = "retry: potential overflow NOT triggered"
             print(retry_result)
             return False, last_op, retry_result, None
 
     else:
-        print(last_op)
+        #print(last_op)
         print(taint_res)
         print("ERROR")
         return False, last_op, taint_res, "ERROR"
