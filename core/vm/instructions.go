@@ -104,6 +104,9 @@ func checkAddProtection(pc *uint64, contract *Contract) bool {
 		if op == ADD && contract.GetOp(n+1) == LT && contract.GetOp(n+2) == ISZERO {
 			return true
 		}
+		if op == ADD && contract.GetOp(n+1) == GT && contract.GetOp(n+2) == JUMPDEST && contract.GetOp(n+3) == ISZERO {
+			return true
+		}
 
 		n++
 	}
