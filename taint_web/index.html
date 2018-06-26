@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <meta charset="UTF-8">
+  <title>EVM Taint Analyzer</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="Cache-Control" content="no-siteapp"/>
+  <link rel="stylesheet" href="assets/css/amazeui.min.css"/>
+  <style>
+    .get {
+      background: url(assets/img/bg-star.jpg);
+      color: #fff;
+      text-align: center;
+      padding: 100px 0;
+    }
+
+    .get-title {
+      font-size: 200%;
+      border: 2px solid #fff;
+      padding: 20px;
+      display: inline-block;
+    }
+
+    .get-btn {
+      background: #fff;
+    }
+
+    .detail {
+      background: #fff;
+    }
+
+    .detail-h2 {
+      text-align: center;
+      font-size: 150%;
+      margin: 40px 0;
+    }
+
+    .detail-h3 {
+      color: #1f8dd6;
+    }
+
+    .detail-p {
+      color: #7f8c8d;
+    }
+
+    .detail-mb {
+      margin-bottom: 30px;
+    }
+
+    .hope {
+      background: #0bb59b;
+      padding: 50px 0;
+    }
+
+    .hope-img {
+      text-align: center;
+    }
+
+    .hope-hr {
+      border-color: #149C88;
+    }
+
+    .hope-title {
+      font-size: 140%;
+    }
+
+    .about {
+      background: #fff;
+      padding: 40px 0;
+      color: #7f8c8d;
+    }
+
+    .about-color {
+      color: #34495e;
+    }
+
+    .about-title {
+      font-size: 180%;
+      padding: 30px 0 50px 0;
+      text-align: center;
+    }
+
+    .footer p {
+      color: #7f8c8d;
+      margin: 0;
+      padding: 15px 0;
+      text-align: center;
+      background: #2d3e50;
+    }
+  </style>
+</head>
+<body>
+
+<script src="assets/js/taint_analyze.js"></script>
+<script src="assets/js/taint_samples.js"></script>
+
+<div class="get">
+  <div class="am-g">
+    <div class="am-u-lg-12">
+      <h1 class="get-title">EVM Taint Analyzer</h1>
+
+      <p>
+        EVM Taint Analyzer
+      </p>
+      <p>Github</p>
+
+    </div>
+  </div>
+</div>
+
+<div class="detail">
+  <div class="am-g">
+    <div class="am-u-lg-12">
+      <div class="am-u-sm-12 am-u-md-12 am-margin" style="text-align: center;">
+        Select a Sample:
+        <select  onchange=select_sample(this) id="sample_select">
+          <option value="BecToken">Bec</option>
+          <option value="SMT">SMT</option>
+          <option value="Lizun">Lizun</option>
+          <option value="darx">darx</option>
+          <option value="GIFT_CARD" selected="selected">GIFT_CARD</option>
+          <option value="RedEnvelope">RedEnvelope</option>
+          <option value="SimpleLotto">SimpleLotto</option>
+          <option value="HBToken">HBToken</option>
+          <option value="Rating">Rating</option>
+          <option value="DANKSIGNALS">DANKSIGNALS</option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="detail">
+  <div class="am-g am-container">
+    <div class="am-u-lg-12 am-margin">
+
+      <div class="am-g">
+        <!-- content start -->
+        <div class="admin-content">
+          <div class="admin-content-body">
+
+
+            <div class="am-tabs am-margin" data-am-tabs>
+              <ul class="am-tabs-nav am-nav am-nav-tabs">
+                <li class="am-active"><a href="#tab_solidity">Solidity</a></li>
+                <li><a href="#tab_bytecode">Runtime Bytecode</a></li>
+              </ul>
+
+              <div class="am-tabs-bd">
+
+                <div class="am-tab-panel am-active" id="tab_solidity">
+                  <form class="am-form">
+                      <div class="am-u-sm-12 am-u-md-12 am-margin-top">
+                        <textarea rows="20" placeholder="Solidity" id="solidity"></textarea>
+                      </div>
+                      <div class="am-u-sm-12 am-u-md-12 am-margin-top">
+                        <p>Input</p>
+                      </div>
+                      <div class="am-u-sm-12 am-u-md-12">
+                        <textarea rows="10" placeholder="Input" id="solidity_input"></textarea>
+                      </div>
+                      <div class="am-margin">
+                        <button type="button" class="am-btn am-btn-primary am-btn-xs" onclick=analyze_solidity()>Start Analyzing</button>
+                      </div>
+                  </form>
+                </div>
+
+                <div class="am-tab-panel am-fade" id="tab_bytecode">
+                  <form class="am-form">
+                      <div class="am-u-sm-12 am-u-md-12 am-margin-top">
+                        <textarea rows="20" placeholder="Bytecode" id="bytecode"></textarea>
+                      </div>
+                      <div class="am-u-sm-12 am-u-md-12 am-margin-top">
+                        <p>Input</p>
+                      </div>
+                      <div class="am-u-sm-12 am-u-md-12">
+                        <textarea rows="10" placeholder="Input" id="bytecode_input"></textarea>
+                      </div>
+                      <div class="am-margin">
+                        <button type="button" class="am-btn am-btn-primary am-btn-xs" onclick=analyze_bytecode()>Start Analyzing</button>
+                      </div>
+                  </form>
+                </div>
+
+                <script type="text/javascript">select_sample(document.getElementById("sample_select"));</script>
+
+              </div>
+            </div>
+
+
+          </div>
+
+        </div>
+        <!-- content end -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="analyze_result">
+</div>
+
+
+
+
+<footer class="footer">
+  <p>Jianbo Gao & Han Liu | Powered by <a href="http://amazeui.org/" target="_blank">AmazeUI</a></p>
+</footer>
+
+<!--[if lt IE 9]>
+<script src="http://libs.baidu.com/jquery/1.11.1/jquery.min.js"></script>
+<script src="http://cdn.staticfile.org/modernizr/2.8.3/modernizr.js"></script>
+<script src="assets/js/amazeui.ie8polyfill.min.js"></script>
+<![endif]-->
+
+<!--[if (gte IE 9)|!(IE)]><!-->
+<script src="assets/js/jquery.min.js"></script>
+<!--<![endif]-->
+<script src="assets/js/amazeui.min.js"></script>
+</body>
+</html>

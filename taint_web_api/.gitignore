@@ -1,0 +1,3 @@
+*.pyc
+#conf/*.py
+!__init__.py
