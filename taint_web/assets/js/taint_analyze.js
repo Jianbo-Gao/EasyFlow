@@ -1,5 +1,5 @@
 function analyze_solidity(){
-    document.getElementById("analyze_result").innerHTML='<div class="hope">  <div class="am-g am-container">    <div class="am-u-lg-6 am-u-md-6 am-u-sm-12">        <p>Analyzing</p>    </div>  </div></div>';
+    document.getElementById("start_button_1").innerHTML="<strong>Analyzing</strong>";
     var type="solidity";
     var code=document.getElementById("solidity").value;
     var input=document.getElementById("solidity_input").value;
@@ -7,7 +7,7 @@ function analyze_solidity(){
 }
 
 function analyze_bytecode(){
-    document.getElementById("analyze_result").innerHTML='<div class="hope">  <div class="am-g am-container">    <div class="am-u-lg-6 am-u-md-6 am-u-sm-12">        <p>Analyzing</p>    </div>  </div></div>';
+    document.getElementById("start_button_2").innerHTML="<strong>Analyzing</strong>";
     var type="bytecode";
     var code=document.getElementById("bytecode").value;
     var input=document.getElementById("bytecode_input").value;
@@ -45,6 +45,8 @@ function httpPost(type, code, input) {
     }
 
     function state_Change(){
+        document.getElementById("start_button_1").innerHTML="<strong>Click HERE to Start Analyzing!</strong>";
+        document.getElementById("start_button_2").innerHTML="<strong>Click HERE to Start Analyzing!</strong>";
         if (xmlhttp.readyState==4)
         {
             // 4 = "loaded"
@@ -53,9 +55,11 @@ function httpPost(type, code, input) {
                 // 200 = OK
                 // alert(xmlhttp.responseText);
                 var result=xmlhttp.responseText;
-                var result_show='<div class="hope">  <div class="am-g am-container">    <div class="am-u-lg-6 am-u-md-6 am-u-sm-12">        <p>';
-                result_show+=JSON.parse(result)["data"].replace(/[\n\r]/g,'<br>');
-                result_show+='</p>    </div>  </div></div>';
+                var api_data=JSON.parse(result)
+                var result_show='<div class="hope" style="background: '+api_data["color"]+'"><div class="am-g am-container"><div class="am-u-sm-12">';
+                result_show+='<div class="hope-title">[Overflow Analysis Report]<br>'+api_data["title"]+'</div>';
+                result_show+='<p>Analysis Log:<br><br>'+api_data["data"].replace(/[\n\r]/g,'<br>')+'</p>';
+                result_show+='</div>  </div></div>';
                 document.getElementById("analyze_result").innerHTML=result_show;
             }
             else

@@ -6,16 +6,20 @@ import json
 
 
 
-def success(msg=""):
+def success(msg, color, title):
     response={}
     response["code"]=0
     response["status"]="success"
-    response["data"]=msg
+    response["data"]=str(msg)
+    response["color"]=str(color)
+    response["title"]=str(title)
     return Response(json.dumps(response),mimetype="application/json")
 
-def fail(msg=""):
+def fail(msg, color, title):
     response={}
     response["code"]=1
     response["status"]="fail"
-    response["data"]=msg
+    response["data"]=str(msg)
+    response["color"]=str(color)
+    response["title"]=str(title)
     return Response(json.dumps(response),mimetype="application/json")

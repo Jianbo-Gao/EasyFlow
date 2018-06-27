@@ -58,7 +58,6 @@
     }
 
     .hope {
-      background: #0bb59b;
       padding: 50px 0;
     }
 
@@ -71,6 +70,7 @@
     }
 
     .hope-title {
+      text-align: center;
       font-size: 140%;
     }
 
@@ -124,7 +124,7 @@
       <div class="am-u-sm-12 am-u-md-12 am-margin" style="text-align: center;">
         Select a Contract Example:
         <select  onchange=select_sample(this) id="sample_select">
-          <option value="BecToken">Bec</option>
+          <option value="BecToken">BecToken</option>
           <option value="SMT">SMT</option>
           <option value="Lizun">Lizun</option>
           <option value="darx">darx</option>
@@ -171,7 +171,7 @@
                         <textarea rows="5" placeholder="Input" id="solidity_input"></textarea>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top" align="center">
-                        <button type="button" class="am-btn am-btn-primary am-btn-xl am-round" onclick=analyze_solidity()><strong>Click HERE to Start Analyzing!</strong></button>
+                        <button type="button" class="am-btn am-btn-primary am-btn-xl am-round" onclick=analyze_solidity() id="start_button_1"><strong>Click HERE to Start Analyzing!</strong></button>
                       </div>
                   </form>
                 </div>
@@ -188,7 +188,7 @@
                         <textarea rows="5" placeholder="Input" id="bytecode_input"></textarea>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top" align="center">
-                        <button type="button" class="am-btn am-btn-primary am-btn-xl am-round" onclick=analyze_bytecode()><strong>Click HERE to Start Analyzing!</strong></button>
+                        <button type="button" class="am-btn am-btn-primary am-btn-xl am-round" onclick=analyze_bytecode() id="start_button_2"><strong>Click HERE to Start Analyzing!</strong></button>
                       </div>
                   </form>
                 </div>
@@ -208,7 +208,7 @@
   </div>
 </div>
 
-<div id="analyze_result">
+<div id="analyze_result" style="word-break: break-all; word-wrap:break-word;">
 </div>
 
 

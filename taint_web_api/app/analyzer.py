@@ -6,12 +6,17 @@ import sys, json, requests, os, uuid
 
 
 sys.path.append("..")
-from conf import * 
+from conf import *
 from lib import *
 
 class Analyzer(restful.Resource):
     def __init__(self):
         self.output=""
+        self.color = common.COLOR_GREEN
+        self.title = ""
+        self.contract_id = str(uuid.uuid1())
+        self.contract_dir = os.path.join(common.HISTORY_LOCAL_PATH,self.contract_id)
+        os.makedirs(self.contract_dir)
 
     def post(self):
         try:
@@ -27,16 +32,16 @@ class Analyzer(restful.Resource):
                 if status:
                     self.main(compile_result, param["input"])
                 else:
-                    return response.fail(compile_result)
-            return response.success(self.output)
+                    self.color=common.COLOR_GREY
+                    return response.fail(compile_result, self.color, self.title)
+            return response.success(self.output, self.color, self.title)
         except Exception, e:
-            return response.fail(str(e))
+            return response.fail(str(e), self.color, self.title)
 
     def compile_solidity(self, solidity_code):
         try:
-            solidity_id = str(uuid.uuid1())
-            solidity_filepath = os.path.join("/tmp",solidity_id+".sol")
-            solidity_resultdir = os.path.join("/tmp",solidity_id)
+            solidity_filepath = os.path.join("/tmp",self.contract_id+".sol")
+            solidity_resultdir = os.path.join("/tmp",self.contract_id)
             with open(solidity_filepath, 'w') as f:
                 f.write(solidity_code)
             os.popen("%s --bin-runtime -o %s %s" % (common.SOLC_PATH, solidity_resultdir, solidity_filepath))
@@ -46,14 +51,20 @@ class Analyzer(restful.Resource):
             return False, str(e)
 
     def print_res(self, id, input_str, last_op, taint_res):
-        self.output += "[Tx %s]\n" % id
-        self.output += "input: %s\n" % input_str
-        self.output += "result: %s\n" % taint_res
+        self.output += "<strong>[Tx %s]</strong>&nbsp;&nbsp;&nbsp;&nbsp;<a class=\"am-btn am-btn-default am-btn-xs am-radius\" target=\"_blank\" href=\"%s\">Show Full Transaction Execution Log</a>\n" % (str(id), common.HISTORY_URL+self.contract_id+"/"+str(id)+".txt")
+        self.output += "<strong>input</strong>: %s\n" % input_str
+        self.output += "<strong>result</strong>: %s\n" % taint_res
         self.output += "\n"
 
-    def run_evm(self, code_str, input_str):
+    def save_detail(self, id, output_str):
+        filename = os.path.join(self.contract_dir, str(id)+".txt")
+        with open(filename, "w") as f:
+            f.write(output_str)
+
+    def run_evm(self, id, code_str, input_str):
         output = os.popen("%s --code %s --input %s --json run" % (common.EVM_PATH, code_str, input_str))
         output_str = output.read()
+        self.save_detail(id, output_str)
         try:
             last_op = json.loads(output_str.splitlines()[-3])["opName"]
         except:
@@ -61,9 +72,10 @@ class Analyzer(restful.Resource):
         taint_res = output_str.splitlines()[-1].strip().split(":")[1][1:]
         return last_op, taint_res
 
-    def run_evm_with_value(self, code_str, input_str):
+    def run_evm_with_value(self, id, code_str, input_str):
         output = os.popen("%s --code %s --input %s --sender 0000000000000000000000000000000000000000 --value \"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\" --prestate %s --json run" % (common.EVM_PATH, code_str, input_str, common.PRESTATE_PATH))
         output_str = output.read()
+        self.save_detail(id, output_str)
         line = -3
         last_op=None
         while line >= -10:
@@ -76,21 +88,25 @@ class Analyzer(restful.Resource):
         return last_op, taint_res
 
     def main(self, code_str, input_str):
-        last_op, taint_res = self.run_evm(code_str, input_str)
+        last_op, taint_res = self.run_evm(0, code_str, input_str)
         self.print_res(0, input_str, last_op, taint_res)
         if taint_res in ("safe", "overflow", "protected overflow"):
             self.output += taint_res+"\n"
+            self.title = taint_res
             if taint_res == "overflow":
+                self.color = common.COLOR_RED
                 return True, last_op, taint_res, None
             else:
                 return False, last_op, taint_res, None
 
         elif taint_res == "potential overflow":
-            last_op_with_value, taint_res_with_value = self.run_evm_with_value(code_str, input_str)
+            last_op_with_value, taint_res_with_value = self.run_evm_with_value("0 with value", code_str, input_str)
             self.print_res("0 with value", input_str, last_op_with_value, taint_res_with_value)
             if taint_res_with_value == "overflow":
                 retry_result = "retry: potential overflow triggered"
                 self.output += retry_result+"\n"
+                self.title = retry_result
+                self.color = common.COLOR_RED
                 return True, last_op_with_value, retry_result, None
 
             arg_num = (len(input_str)-8)/64
@@ -107,18 +123,22 @@ class Analyzer(restful.Resource):
                     arg_id += 1
 
                 retry_id += 1
-                retry_last_op, retry_taint_res = self.run_evm(code_str, input_str)
+                retry_last_op, retry_taint_res = self.run_evm(retry_id, code_str, input_str)
                 self.print_res(retry_id, input_str, retry_last_op, retry_taint_res)
                 if retry_taint_res == "overflow":
                     retry_result = "retry: potential overflow triggered"
                     self.output += retry_result + "\n"
+                    self.color = common.COLOR_RED
+                    self.title = retry_result
                     return True, retry_last_op, retry_result, None
             else:
                 retry_result = "retry: potential overflow NOT triggered"
                 self.output += retry_result +"\n"
+                self.title = retry_result
                 return False, last_op, retry_result, None
 
         else:
             self.output += taint_res + "\n"
             self.output += "ERROR\n"
+            self.title = "Internal ERROR"
             return False, last_op, taint_res, "ERROR"
