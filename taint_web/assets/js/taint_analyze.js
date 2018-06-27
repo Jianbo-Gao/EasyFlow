@@ -1,21 +1,23 @@
 function analyze_solidity(){
     document.getElementById("start_button_1").innerHTML="<strong>Analyzing</strong>";
     var type="solidity";
+    var name=document.getElementById("solidity_name").value;
     var code=document.getElementById("solidity").value;
     var input=document.getElementById("solidity_input").value;
-    httpPost(type, code, input);
+    httpPost(type, name, code, input);
 }
 
 function analyze_bytecode(){
     document.getElementById("start_button_2").innerHTML="<strong>Analyzing</strong>";
     var type="bytecode";
+    var name="";
     var code=document.getElementById("bytecode").value;
     var input=document.getElementById("bytecode_input").value;
-    httpPost(type, code, input);
+    httpPost(type, name, code, input);
 }
 
 
-function httpPost(type, code, input) {
+function httpPost(type, name, code, input) {
     var xmlhttp;
     xmlhttp=null;
     if (window.XMLHttpRequest)
@@ -35,6 +37,7 @@ function httpPost(type, code, input) {
         //var content = "type="+type+"&code="+code+"&input="+input;
         var formData = new FormData();
         formData.append("type", type);
+        formData.append("name", name);
         formData.append("code", code);
         formData.append("input", input);
         xmlhttp.send(formData);

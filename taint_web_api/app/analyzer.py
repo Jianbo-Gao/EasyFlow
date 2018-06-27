@@ -19,33 +19,37 @@ class Analyzer(restful.Resource):
         os.makedirs(self.contract_dir)
 
     def post(self):
-        try:
-            parser = reqparse.RequestParser()
-            parser.add_argument("type", type=unicode, required=True)
-            parser.add_argument("code", type=unicode, required=True)
-            parser.add_argument("input", type=unicode, required=True)
-            param = parser.parse_args()
-            if param["type"] == "bytecode":
-                self.main(param["code"], param["input"])
-            elif param["type"] == "solidity":
-                status, compile_result = self.compile_solidity(param["code"])
-                if status:
-                    self.main(compile_result, param["input"])
-                else:
-                    self.color=common.COLOR_GREY
-                    return response.fail(compile_result, self.color, self.title)
-            return response.success(self.output, self.color, self.title)
-        except Exception, e:
-            return response.fail(str(e), self.color, self.title)
+        #try:
+        parser = reqparse.RequestParser()
+        parser.add_argument("type", type=unicode, required=True)
+        parser.add_argument("name", type=unicode, required=True)
+        parser.add_argument("code", type=unicode, required=True)
+        parser.add_argument("input", type=unicode, required=True)
+        param = parser.parse_args()
+        if param["type"] == "bytecode":
+            self.main(param["code"], param["input"])
+        elif param["type"] == "solidity":
+            status, compile_result = self.compile_solidity(param["name"], param["code"])
+            if status:
+                self.main(compile_result, param["input"])
+            else:
+                self.color=common.COLOR_GREY
+                return response.fail(compile_result, self.color, self.title)
+        return response.success(self.output, self.color, self.title)
+        #except Exception, e:
+        #    return response.fail(str(e), self.color, self.title)
 
-    def compile_solidity(self, solidity_code):
+    def compile_solidity(self, contract_name, solidity_code):
         try:
             solidity_filepath = os.path.join("/tmp",self.contract_id+".sol")
             solidity_resultdir = os.path.join("/tmp",self.contract_id)
             with open(solidity_filepath, 'w') as f:
                 f.write(solidity_code)
+            bin_runtime_filepath=os.path.join(solidity_resultdir, contract_name+".bin-runtime")
             os.popen("%s --bin-runtime -o %s %s" % (common.SOLC_PATH, solidity_resultdir, solidity_filepath))
-            compile_result = os.popen("cat %s" % os.path.join(solidity_resultdir,"*.bin-runtime")).read()
+            if not os.path.isfile(bin_runtime_filepath):
+                return False, "Compile Error with solc 0.4.24+commit.e67f0147.Linux.g++."
+            compile_result = os.popen("cat %s" % bin_runtime_filepath).read()
             return True, compile_result
         except Exception, e:
             return False, str(e)
@@ -68,7 +72,10 @@ class Analyzer(restful.Resource):
         try:
             last_op = json.loads(output_str.splitlines()[-3])["opName"]
         except:
-            last_op = json.loads(output_str.splitlines()[-6])["opName"]
+            try:
+                last_op = json.loads(output_str.splitlines()[-6])["opName"]
+            except:
+                last_op = ""
         taint_res = output_str.splitlines()[-1].strip().split(":")[1][1:]
         return last_op, taint_res
 
