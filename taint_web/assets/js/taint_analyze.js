@@ -60,7 +60,7 @@ function httpPost(type, name, code, input) {
                 var result=xmlhttp.responseText;
                 var api_data=JSON.parse(result)
                 var result_show='<div class="hope" style="background: '+api_data["color"]+'"><div class="am-g am-container"><div class="am-u-sm-12">';
-                result_show+='<div class="hope-title">[Overflow Analysis Report]<br>'+api_data["title"]+'</div>';
+                result_show+='<div class="hope-title">[Overflow Analysis Report]<br><strong>'+api_data["title"]+'</strong></div>';
                 result_show+='<p>Analysis Log:<br><br>'+api_data["data"].replace(/[\n\r]/g,'<br>')+'</p>';
                 result_show+='</div>  </div></div>';
                 document.getElementById("analyze_result").innerHTML=result_show;

@@ -55,7 +55,7 @@ class Analyzer(restful.Resource):
             return False, str(e)
 
     def print_res(self, id, input_str, last_op, taint_res):
-        self.output += "<strong>[Tx %s]</strong>&nbsp;&nbsp;&nbsp;&nbsp;<a class=\"am-btn am-btn-default am-btn-xs am-radius\" target=\"_blank\" href=\"%s\">Show Full Transaction Execution Log</a>\n" % (str(id), common.HISTORY_URL+self.contract_id+"/"+str(id)+".txt")
+        self.output += "<strong>[Transaction %s]</strong>&nbsp;&nbsp;&nbsp;&nbsp;<a class=\"am-btn am-btn-default am-btn-xs am-radius\" target=\"_blank\" href=\"%s\">Show Full Transaction Execution Log</a>\n" % (str(id), common.HISTORY_URL+self.contract_id+"/"+str(id)+".txt")
         self.output += "<strong>input</strong>: %s\n" % input_str
         self.output += "<strong>result</strong>: %s\n" % taint_res
         self.output += "\n"
@@ -98,8 +98,9 @@ class Analyzer(restful.Resource):
         last_op, taint_res = self.run_evm(0, code_str, input_str)
         self.print_res(0, input_str, last_op, taint_res)
         if taint_res in ("safe", "overflow", "protected overflow"):
-            self.output += taint_res+"\n"
-            self.title = taint_res
+            res_dict = {"safe":"Safe", "overflow": "Overflow", "protected overflow": "Protected Overflow"}
+            self.output += res_dict[taint_res]+"\n"
+            self.title = res_dict[taint_res]
             if taint_res == "overflow":
                 self.color = common.COLOR_RED
                 return True, last_op, taint_res, None
@@ -110,7 +111,7 @@ class Analyzer(restful.Resource):
             last_op_with_value, taint_res_with_value = self.run_evm_with_value("0 with value", code_str, input_str)
             self.print_res("0 with value", input_str, last_op_with_value, taint_res_with_value)
             if taint_res_with_value == "overflow":
-                retry_result = "retry: potential overflow triggered"
+                retry_result = "Potential Overflow Triggered"
                 self.output += retry_result+"\n"
                 self.title = retry_result
                 self.color = common.COLOR_RED
@@ -133,13 +134,13 @@ class Analyzer(restful.Resource):
                 retry_last_op, retry_taint_res = self.run_evm(retry_id, code_str, input_str)
                 self.print_res(retry_id, input_str, retry_last_op, retry_taint_res)
                 if retry_taint_res == "overflow":
-                    retry_result = "retry: potential overflow triggered"
+                    retry_result = "Potential Overflow Triggered"
                     self.output += retry_result + "\n"
                     self.color = common.COLOR_RED
                     self.title = retry_result
                     return True, retry_last_op, retry_result, None
             else:
-                retry_result = "retry: potential overflow NOT triggered"
+                retry_result = "Potential Overflow not Triggered"
                 self.output += retry_result +"\n"
                 self.title = retry_result
                 return False, last_op, retry_result, None
