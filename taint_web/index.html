@@ -13,6 +13,7 @@
   <style>
     .get {
       background: url(assets/img/bg-star.jpg);
+      background-size:100%;
       color: #fff;
       text-align: center;
       padding: 100px 0;
@@ -30,6 +31,11 @@
     }
 
     .detail {
+      background:  url(assets/img/bg-code.jpg);
+      background-size:100%;
+    }
+
+    .code-editor{
       background: #fff;
     }
 
@@ -116,7 +122,7 @@
   <div class="am-g">
     <div class="am-u-lg-12">
       <div class="am-u-sm-12 am-u-md-12 am-margin" style="text-align: center;">
-        Select a Sample:
+        Select a Contract Example:
         <select  onchange=select_sample(this) id="sample_select">
           <option value="BecToken">Bec</option>
           <option value="SMT">SMT</option>
@@ -139,7 +145,7 @@
   <div class="am-g am-container">
     <div class="am-u-lg-12 am-margin">
 
-      <div class="am-g">
+      <div class="am-g code-editor">
         <!-- content start -->
         <div class="admin-content">
           <div class="admin-content-body">
@@ -156,13 +162,13 @@
                 <div class="am-tab-panel am-active" id="tab_solidity">
                   <form class="am-form">
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top">
-                        <textarea rows="20" placeholder="Solidity" id="solidity"></textarea>
+                        <textarea rows="15" placeholder="Solidity" id="solidity"></textarea>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top">
                         <p>Input</p>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12">
-                        <textarea rows="10" placeholder="Input" id="solidity_input"></textarea>
+                        <textarea rows="5" placeholder="Input" id="solidity_input"></textarea>
                       </div>
                       <div class="am-margin">
                         <button type="button" class="am-btn am-btn-primary am-btn-xs" onclick=analyze_solidity()>Start Analyzing</button>
@@ -173,13 +179,13 @@
                 <div class="am-tab-panel am-fade" id="tab_bytecode">
                   <form class="am-form">
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top">
-                        <textarea rows="20" placeholder="Bytecode" id="bytecode"></textarea>
+                        <textarea rows="15" placeholder="Bytecode" id="bytecode"></textarea>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12 am-margin-top">
                         <p>Input</p>
                       </div>
                       <div class="am-u-sm-12 am-u-md-12">
-                        <textarea rows="10" placeholder="Input" id="bytecode_input"></textarea>
+                        <textarea rows="5" placeholder="Input" id="bytecode_input"></textarea>
                       </div>
                       <div class="am-margin">
                         <button type="button" class="am-btn am-btn-primary am-btn-xs" onclick=analyze_bytecode()>Start Analyzing</button>
