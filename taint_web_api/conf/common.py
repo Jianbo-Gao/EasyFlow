@@ -12,4 +12,4 @@ COLOR_RED="#FFBFBF"
 COLOR_GREY="#DFDFDF"
 
 HISTORY_LOCAL_PATH="/home/jianbo/go-ethereum/taint_web/history/"
-HISTORY_URL="http://evm.gaojianbo.cn/history/"
+HISTORY_URL="http://easyflow.cc/history/"
