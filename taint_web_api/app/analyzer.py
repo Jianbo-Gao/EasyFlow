@@ -26,12 +26,13 @@ class Analyzer(restful.Resource):
         parser.add_argument("code", type=unicode, required=True)
         parser.add_argument("input", type=unicode, required=True)
         param = parser.parse_args()
+        input_str = param["input"].replace("\n","").replace("\r","")
         if param["type"] == "bytecode":
-            self.main(param["code"], param["input"])
+            self.main(param["code"], input_str)
         elif param["type"] == "solidity":
             status, compile_result = self.compile_solidity(param["name"], param["code"])
             if status:
-                self.main(compile_result, param["input"])
+                self.main(compile_result, input_str)
             else:
                 self.color=common.COLOR_GREY
                 return response.fail(compile_result, self.color, self.title)
