@@ -9,4 +9,4 @@ code=`cat GIFT_CARD.bin-runtime`
 input="166eb4cbc20539e9ebb1a6bba4f700fe77235c52748a4d52078ed425c1d42928a06414e40000000000000000000000000000000000000000000000000000000000000000"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

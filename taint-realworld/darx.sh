@@ -17,4 +17,4 @@ code=`cat darx.bin-runtime`
 input="a9059cbb0000000000000000000000006636B6e6CC15aF958bED6E935359763EB0e1e0f30000000000000000000000000000000000000000000000000000000000000001"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

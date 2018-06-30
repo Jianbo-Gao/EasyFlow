@@ -9,4 +9,4 @@ code=`cat DANKSIGNALS.bin-runtime`
 input="a9059cbb000000000000000000000000c4bca4fb49064191ecbeff27359c07f92cd86c01000000000000000000000000000000000000000050c783eb9b5c85f2a8000000"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

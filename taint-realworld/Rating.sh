@@ -9,4 +9,4 @@ code=`cat Rating.bin-runtime`
 input="50b7b7a2546974616e6963000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

@@ -17,4 +17,4 @@ code=`cat Lizun.bin-runtime`
 input="a9059cbb00000000000000000000000078d5eb5057972aba6fe9fc3dff4335b4209a874c0000000000000000000000000000000000000000000000000000000000000001"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

@@ -9,4 +9,4 @@ code=`cat SimpleLotto.bin-runtime`
 input="f0e10c0d000000000000000000000000466f39a5fd8d1bd54ea7e82975177c0f00c684920000000000000000000000000000000000000000000000000000000000000017"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld

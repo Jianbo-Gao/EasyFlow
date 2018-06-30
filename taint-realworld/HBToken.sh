@@ -13,4 +13,4 @@ code=`cat HBToken.bin-runtime`
 input="a9059cbb00000000000000000000000054244e76fcf5c91ef149c5e6bfd0ebcc257cca100000000000000000000000000000000000000000000000000000000000000000"
 cd ./../taint_scripts
 python run.py --code $code --input $input --debug
-cd ./../taint_real
+cd ./../taint-realworld
