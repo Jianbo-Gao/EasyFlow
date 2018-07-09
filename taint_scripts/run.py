@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os, json, argparse
+import os, json, argparse, uuid
 import config
+
+executed_ops=set()
 
 def print_res(id, input_str, last_op, taint_res):
     print("[Tx %s]" % id)
@@ -11,9 +13,26 @@ def print_res(id, input_str, last_op, taint_res):
     print("result: %s" % taint_res)
     print("")
 
+def get_full_opnum(code_str):
+    temp_filename=os.path.join(config.TEMP_DIR, str(uuid.uuid1()))
+    with open(temp_filename, 'w') as f:
+        f.write(code_str.split('00a165')[0])
+    output = os.popen("%s disasm %s" % (config.EVM_PATH, temp_filename))
+    output_str = output.read()
+    os.remove(temp_filename)
+    return len(output_str.strip().splitlines()) - 1
+
+def get_executed_ops(output_str):
+    for line in output_str.splitlines():
+        try:
+            executed_ops.add(json.loads(line)["pc"])
+        except:
+            pass
+
 def run_evm(code_str, input_str):
     output = os.popen("%s --code %s --input %s --json run" % (config.EVM_PATH, code_str, input_str))
     output_str = output.read()
+    get_executed_ops(output_str)
     try:
         last_op = json.loads(output_str.splitlines()[-3])["opName"]
     except:
@@ -24,6 +43,7 @@ def run_evm(code_str, input_str):
 def run_evm_with_value(code_str, input_str):
     output = os.popen("%s --code %s --input %s --sender 0000000000000000000000000000000000000000 --value \"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\" --prestate genesis-example.json --json run" % (config.EVM_PATH, code_str, input_str))
     output_str = output.read()
+    get_executed_ops(output_str)
     line = -3
     last_op=None
     while line >= -10:
@@ -115,6 +135,7 @@ if __name__ == '__main__':
         demo()
     elif (not args.demo) and args.code and args.input:
         main(args.code, args.input, args.debug)
+        print("Coverage: %.2f%%" % (len(executed_ops)*100.00/get_full_opnum(args.code)))
     else:
         parser.print_help()
 
