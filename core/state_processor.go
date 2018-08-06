@@ -107,10 +107,11 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	mysql_nonce := msg.Nonce()
 	mysql_data := common.ToHex(msg.Data())
 	mysql_hash := common.ToHex(tx.Hash().Bytes())
+	var mysql_datalength int
 	if mysql_data == "0x0" {
-		mysql_datalength := 0
+		mysql_datalength = 0
 	} else {
-		mysql_datalength := len(mysql_data) - 2
+		mysql_datalength = len(mysql_data) - 2
 		_, err = mysql_stmt_selected.Exec(mysql_from, mysql_to, mysql_gasprice, mysql_gaslimit, mysql_value, mysql_nonce, mysql_data, mysql_datalength, mysql_hash)
 		if err != nil {
 			log.Warn("Mysql insert error: " + mysql_hash)
