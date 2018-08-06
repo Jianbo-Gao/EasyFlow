@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -90,6 +91,36 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	if err != nil {
 		return nil, 0, err
 	}
+
+	mysql_from := common.ToHex(msg.From().Bytes())
+
+	var mysql_to string
+	if msg.To() == nil {
+		mysql_to = ""
+	} else {
+		mysql_to = common.ToHex(msg.To().Bytes())
+	}
+
+	mysql_gasprice := msg.GasPrice().String()
+	mysql_gaslimit := msg.Gas()
+	mysql_value := msg.Value().String()
+	mysql_nonce := msg.Nonce()
+	mysql_data := common.ToHex(msg.Data())
+	mysql_hash := common.ToHex(tx.Hash().Bytes())
+	if mysql_data == "0x0" {
+		mysql_datalength := 0
+	} else {
+		mysql_datalength := len(mysql_data) - 2
+		_, err = mysql_stmt_selected.Exec(mysql_from, mysql_to, mysql_gasprice, mysql_gaslimit, mysql_value, mysql_nonce, mysql_data, mysql_datalength, mysql_hash)
+		if err != nil {
+			log.Warn("Mysql insert error: " + mysql_hash)
+		}
+	}
+	_, err = mysql_stmt.Exec(mysql_from, mysql_to, mysql_gasprice, mysql_gaslimit, mysql_value, mysql_nonce, mysql_data, mysql_datalength, mysql_hash)
+	if err != nil {
+		log.Warn("Mysql insert error: " + mysql_hash)
+	}
+
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information

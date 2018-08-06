@@ -44,7 +44,15 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+
+	"database/sql"
+	_ "github.com/go-sql-driver/mysql"
 )
+
+var mysql_db *sql.DB
+var mysql_err error
+var mysql_stmt *sql.Stmt
+var mysql_stmt_selected *sql.Stmt
 
 var (
 	blockInsertTimer = metrics.NewRegisteredTimer("chain/inserts", nil)
@@ -190,6 +198,61 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 			}
 		}
 	}
+
+	mysql_db, mysql_err = sql.Open("mysql", "root:password@tcp(127.0.0.1:3306)/blockchain?charset=utf8")
+	if mysql_err != nil {
+		log.Error("Mysql connection error.")
+		panic(mysql_err)
+	}
+
+	// CREATE TABLE `T_ethereum` (
+	//     `c_id` bigint NOT NULL AUTO_INCREMENT,
+	//     `c_synctime` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	//     `c_from` varchar(128),
+	//     `c_to` varchar(128),
+	//     `c_gasprice` text,
+	//     `c_gaslimit` bigint,
+	//     `c_value` text,
+	//     `c_nonce` bigint,
+	//     `c_data` longtext,
+	//     `c_datalength` int,
+	//     `c_hash` varchar(128),
+	//     PRIMARY KEY (`c_id`),
+	//     INDEX index_datalength (c_datalength),
+	//     INDEX index_hash (c_hash)
+	// ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+	mysql_stmt, mysql_err = mysql_db.Prepare("INSERT T_ethereum SET c_from=?,c_to=?,c_gasprice=?,c_gaslimit=?,c_value=?,c_nonce=?,c_data=?,c_datalength=?,c_hash=?")
+	if mysql_err != nil {
+		log.Error("Mysql statement prepare error.")
+		panic(mysql_err)
+	}
+
+	// CREATE TABLE `T_ethereum_selected` (
+	//     `c_id` bigint NOT NULL AUTO_INCREMENT,
+	//     `c_synctime` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	//     `c_from` varchar(128),
+	//     `c_to` varchar(128),
+	//     `c_gasprice` text,
+	//     `c_gaslimit` bigint,
+	//     `c_value` text,
+	//     `c_nonce` bigint,
+	//     `c_data` longtext,
+	//     `c_datalength` int,
+	//     `c_hash` varchar(128),
+	//     PRIMARY KEY (`c_id`),
+	//     INDEX index_datalength (c_datalength),
+	//     INDEX index_hash (c_hash)
+	// ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+	mysql_stmt_selected, mysql_err = mysql_db.Prepare("INSERT T_ethereum_selected SET c_from=?,c_to=?,c_gasprice=?,c_gaslimit=?,c_value=?,c_nonce=?,c_data=?,c_datalength=?,c_hash=?")
+	if mysql_err != nil {
+		log.Error("Mysql statement prepare error.")
+		panic(mysql_err)
+	}
+
+	log.Info("Mysql connection success.")
+
 	// Take ownership of this particular state
 	go bc.update()
 	return bc, nil
@@ -1380,6 +1443,8 @@ func (bc *BlockChain) update() {
 		case <-futureTimer.C:
 			bc.procFutureBlocks()
 		case <-bc.quit:
+			mysql_db.Close()
+			log.Info("Mysql connection closed.")
 			return
 		}
 	}
