@@ -20,6 +20,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"io/ioutil"
+	"net/http"
+	"encoding/json"
+	"bytes"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -27,6 +31,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+type JsonrpcStorage struct {
+    Jsonrpc string
+    Id int
+    Result string
+}
 
 var (
 	bigZero                  = new(big.Int)
@@ -1098,6 +1108,28 @@ func opMstore8(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *
 func opSload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	loc := common.BigToHash(stack.pop())
 	val := evm.StateDB.GetState(contract.Address(), loc).Big()
+
+	if val.Cmp(big.NewInt(0)) == 0 {
+		// JSON-RPC
+		addrStr := contract.Address().Hex()
+		locStr := loc.Hex()
+		url := "http://192.168.1.44:8545"
+		data := "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getStorageAt\",\"params\":[\""+addrStr+"\",\""+locStr+"\",\"latest\"],\"id\":1}"
+		var jsonStr = []byte(data)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+		    panic(err)
+		}
+		defer resp.Body.Close()
+		body, _ := ioutil.ReadAll(resp.Body)
+		var jsonStorage JsonrpcStorage
+		json.Unmarshal(body, &jsonStorage)
+		val, _ = val.SetString(jsonStorage.Result[2:], 16)
+	}
+
 	stack.push(val)
 
 	tl := taint_stack.pop()
