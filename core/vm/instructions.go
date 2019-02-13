@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -47,205 +49,14 @@ func U256(x *big.Int) *big.Int {
 	return x.And(x, tt256m1)
 }
 
-func checkExpOverflow(base, exponent *big.Int) bool {
-	const wordBits = 32 << (uint64(^big.Word(0)) >> 63)
-	result := big.NewInt(1)
-
-	for _, word := range exponent.Bits() {
-		for i := 0; i < wordBits; i++ {
-			if word&1 == 1 {
-				temp_x := new(big.Int).Set(result)
-				temp_y := new(big.Int).Set(base)
-
-				U256(result.Mul(result, base))
-
-				temp_res := new(big.Int).Set(result)
-				if math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-					return true
-				}
-			}
-			temp_x := new(big.Int).Set(base)
-			temp_y := new(big.Int).Set(base)
-
-			U256(base.Mul(base, base))
-
-			temp_res := new(big.Int).Set(base)
-			if math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-				return true
-			}
-
-			word >>= 1
-		}
-	}
-	return false
-}
-
-func checkAddProtection(pc *uint64, contract *Contract) bool {
-	var n = *pc
-	var op OpCode
-	//fmt.Println(contract.GetOp(n))
-	for {
-		op = contract.GetOp(n)
-		if op == JUMP || op == JUMPI || op == JUMPDEST {
-			break
-		}
-		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
-			break
-		}
-
-		// safemath pattern: contract3.safeadd1
-		// assert(c >= a)
-		if op == DUP4 && contract.GetOp(n+1) == DUP2 && contract.GetOp(n+2) == LT && contract.GetOp(n+3) == ISZERO {
-			return true
-		}
-
-		// safemath pattern: contract3.safeadd2
-		// if(a + b >= a)
-		if op == ADD && contract.GetOp(n+1) == LT && contract.GetOp(n+2) == ISZERO {
-			return true
-		}
-		if op == ADD && contract.GetOp(n+1) == GT && contract.GetOp(n+2) == JUMPDEST && contract.GetOp(n+3) == ISZERO {
-			return true
-		}
-
-		n++
-	}
-
-	n = *pc
-	for {
-		op = contract.GetOp(n)
-		if op == JUMP || op == JUMPI || op == JUMPDEST {
-			break
-		}
-		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
-			break
-		}
-
-		// safemath pattern: contract3.safeadd2
-		// if(a + b >= a)
-		if op == ADD && contract.GetOp(n+1) == LT && contract.GetOp(n+2) == ISZERO {
-			return true
-		}
-
-		// safemath pattern: contract3.safeadd3
-		// if (a > MAX_UINT256 - b) throw;
-		if op == ADD && contract.GetOp(n-15) == SUB && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == GT && contract.GetOp(n-12) == ISZERO {
-			return true
-		}
-
-		n--
-	}
-	return false
-}
-
-func checkSubProtection(pc *uint64, contract *Contract) bool {
-	var n = *pc
-	var op OpCode
-	//fmt.Println(contract.GetOp(n))
-
-	n = *pc
-	for {
-		op = contract.GetOp(n)
-		if op == JUMP || op == JUMPI || op == JUMPDEST {
-			break
-		}
-		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
-			break
-		}
-
-		// safemath pattern: contract4.safesub1
-		// assert(b<=a)
-		if op == SUB && contract.GetOp(n-14) == DUP3 && contract.GetOp(n-13) == DUP3 && contract.GetOp(n-12) == GT && contract.GetOp(n-11) == ISZERO {
-			return true
-		}
-
-		// safemath pattern: contract4.safesub2
-		// if(a>=b)
-		if op == SUB && contract.GetOp(n-11) == DUP2 && contract.GetOp(n-10) == DUP4 && contract.GetOp(n-9) == LT && contract.GetOp(n-8) == ISZERO {
-			return true
-		}
-
-		// safemath pattern: contract4.safesub2
-		// if (a < b) throw;
-		if op == SUB && contract.GetOp(n-15) == DUP2 && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == LT && contract.GetOp(n-12) == ISZERO {
-			return true
-		}
-
-		n--
-	}
-	return false
-}
-
-func checkMulProtection(pc *uint64, contract *Contract) bool {
-	var n = *pc
-	var op OpCode
-	//fmt.Println(contract.GetOp(n))
-	for {
-		op = contract.GetOp(n)
-		if op == JUMP || op == JUMPI || op == JUMPDEST {
-			break
-		}
-		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
-			break
-		}
-
-		// safemath pattern: contract5.safemul1
-		// assert(a == 0 || c / a == b);
-		if op == PUSH1 && contract.GetOp(n+2) == DUP5 && contract.GetOp(n+3) == EQ && contract.GetOp(n+22) == DIV && contract.GetOp(n+23) == EQ {
-			return true
-		}
-
-		n++
-	}
-
-	n = *pc
-	for {
-		op = contract.GetOp(n)
-		if op == JUMP || op == JUMPI || op == JUMPDEST {
-			break
-		}
-		if op == CREATE || op == CALL || op == CALLCODE || op == RETURN || op == DELEGATECALL || op == STATICCALL || op == REVERT || op == SELFDESTRUCT {
-			break
-		}
-
-		// safemath pattern: contract5.safemul2
-		// if (x > MAX_UINT256 / y) throw;
-		if op == MUL && contract.GetOp(n-15) == DIV && contract.GetOp(n-14) == DUP4 && contract.GetOp(n-13) == GT && contract.GetOp(n-12) == ISZERO {
-			return true
-		}
-
-		n--
-	}
-	return false
-}
-
 func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y := stack.pop(), stack.peek()
-	temp_x := new(big.Int).Set(x)
-	temp_y := new(big.Int).Set(y)
 	math.U256(y.Add(x, y))
 
 	evm.interpreter.intPool.put(x)
 
-	temp_res := new(big.Int).Set(y)
-	temp_flag := SAFE_FLAG
-
 	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if temp_res.Cmp(temp_x) < 0 || temp_res.Cmp(temp_y) < 0 {
-			if checkAddProtection(pc, contract) {
-				temp_flag |= PROTECTED_OVERFLOW_FLAG
-				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
-			} else {
-				temp_flag |= OVERFLOW_FLAG
-				global_taint_flag |= OVERFLOW_FLAG
-			}
-		}
-		temp_flag |= POTENTIAL_OVERFLOW_FLAG
-		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-	}
-
-	taint_stack.push(temp_flag)
+	taint_stack.push(tx | ty)
 
 	evm.interpreter.taintIntPool.put(tx)
 
@@ -254,31 +65,12 @@ func opAdd(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y := stack.pop(), stack.peek()
-	temp_x := new(big.Int).Set(x)
-	temp_y := new(big.Int).Set(y)
 	math.U256(y.Sub(x, y))
 
 	evm.interpreter.intPool.put(x)
 
-	//temp_res := new(big.Int).Set(y)
-	temp_flag := SAFE_FLAG
-
 	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if temp_y.Cmp(temp_x) > 0 {
-			if checkSubProtection(pc, contract) {
-				temp_flag |= PROTECTED_OVERFLOW_FLAG
-				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
-			} else {
-				temp_flag |= OVERFLOW_FLAG
-				global_taint_flag |= OVERFLOW_FLAG
-			}
-		}
-		temp_flag |= POTENTIAL_OVERFLOW_FLAG
-		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-	}
-
-	taint_stack.push(temp_flag)
+	taint_stack.push(tx | ty)
 
 	evm.interpreter.taintIntPool.put(tx)
 
@@ -287,31 +79,12 @@ func opSub(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 
 func opMul(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y := stack.pop(), stack.pop()
-	temp_x := new(big.Int).Set(x)
-	temp_y := new(big.Int).Set(y)
 	stack.push(math.U256(x.Mul(x, y)))
 
 	evm.interpreter.intPool.put(y)
 
-	temp_res := new(big.Int).Set(x)
-	temp_flag := SAFE_FLAG
-
 	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if temp_x.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-			if checkMulProtection(pc, contract) {
-				temp_flag |= PROTECTED_OVERFLOW_FLAG
-				global_taint_flag |= PROTECTED_OVERFLOW_FLAG
-			} else {
-				temp_flag |= OVERFLOW_FLAG
-				global_taint_flag |= OVERFLOW_FLAG
-			}
-		}
-		temp_flag |= POTENTIAL_OVERFLOW_FLAG
-		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-	}
-
-	taint_stack.push(temp_flag)
+	taint_stack.push(tx | ty)
 
 	evm.interpreter.taintIntPool.put(ty)
 
@@ -327,7 +100,6 @@ func opDiv(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stac
 	}
 	evm.interpreter.intPool.put(x)
 
-	// solidity div cannot overflow
 	tx, ty := taint_stack.pop(), taint_stack.pop()
 	taint_stack.push(tx | ty)
 	evm.interpreter.taintIntPool.put(tx)
@@ -399,26 +171,12 @@ func opSmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 
 func opExp(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	base, exponent := stack.pop(), stack.pop()
-	temp_x := new(big.Int).Set(base)
-	temp_y := new(big.Int).Set(exponent)
 	stack.push(math.Exp(base, exponent))
 
 	evm.interpreter.intPool.put(base, exponent)
 
-	//temp_res := new(big.Int).Set(math.Exp(temp_x, temp_y))
-	temp_flag := SAFE_FLAG
-
 	tx, ty := taint_stack.pop(), taint_stack.pop()
-	if (tx|ty)&CALLDATA_FLAG > 0 {
-		if checkExpOverflow(temp_x, temp_y) {
-			temp_flag |= OVERFLOW_FLAG
-			global_taint_flag |= OVERFLOW_FLAG
-		}
-		temp_flag |= POTENTIAL_OVERFLOW_FLAG
-		global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-	}
-
-	taint_stack.push(temp_flag)
+	taint_stack.push(tx | ty)
 
 	evm.interpreter.taintIntPool.put(tx, ty)
 	return nil, nil, nil
@@ -625,32 +383,12 @@ func opByte(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 func opAddmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y, z := stack.pop(), stack.pop(), stack.pop()
 	tx, ty, tz := taint_stack.pop(), taint_stack.pop(), taint_stack.pop()
-	temp_x := new(big.Int).Set(x)
-	temp_y := new(big.Int).Set(y)
 	if z.Cmp(bigZero) > 0 {
 		x.Add(x, y)
-
-		temp_flag := SAFE_FLAG
-		temp_res := new(big.Int).Set(x)
-
 		x.Mod(x, z)
 		stack.push(math.U256(x))
 
-		if (tx|ty)&CALLDATA_FLAG > 0 {
-			if temp_res.Cmp(temp_x) < 0 || temp_res.Cmp(temp_y) < 0 {
-				if checkAddProtection(pc, contract) {
-					temp_flag |= PROTECTED_OVERFLOW_FLAG
-					global_taint_flag |= PROTECTED_OVERFLOW_FLAG
-				} else {
-					temp_flag |= OVERFLOW_FLAG
-					global_taint_flag |= OVERFLOW_FLAG
-				}
-			}
-			temp_flag |= POTENTIAL_OVERFLOW_FLAG
-			global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-		}
-
-		taint_stack.push(temp_flag)
+		taint_stack.push(tx | ty | tz)
 
 	} else {
 		stack.push(x.SetUint64(0))
@@ -666,31 +404,12 @@ func opAddmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 func opMulmod(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	x, y, z := stack.pop(), stack.pop(), stack.pop()
 	tx, ty, tz := taint_stack.pop(), taint_stack.pop(), taint_stack.pop()
-	temp_x := new(big.Int).Set(x)
-	temp_y := new(big.Int).Set(y)
 	if z.Cmp(bigZero) > 0 {
 		x.Mul(x, y)
-
-		temp_flag := SAFE_FLAG
-		temp_res := new(big.Int).Set(x)
-
 		x.Mod(x, z)
 		stack.push(math.U256(x))
 
-		if (tx|ty)&CALLDATA_FLAG > 0 {
-			if temp_x.Cmp(big.NewInt(0)) != 0 && math.U256(temp_res.Div(temp_res, temp_x)).Cmp(temp_y) != 0 {
-				if checkMulProtection(pc, contract) {
-					temp_flag |= PROTECTED_OVERFLOW_FLAG
-					global_taint_flag |= PROTECTED_OVERFLOW_FLAG
-				} else {
-					temp_flag |= OVERFLOW_FLAG
-					global_taint_flag |= OVERFLOW_FLAG
-				}
-			}
-			temp_flag |= POTENTIAL_OVERFLOW_FLAG
-			global_taint_flag |= POTENTIAL_OVERFLOW_FLAG
-		}
-		taint_stack.push(temp_flag)
+		taint_stack.push(tx | ty | tz)
 	} else {
 		stack.push(x.SetUint64(0))
 
@@ -832,21 +551,27 @@ func opCallValue(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack
 	stack.push(evm.interpreter.intPool.get().Set(contract.value))
 
 	evm.interpreter.taintIntPool.get()
-	taint_stack.push(CALLDATA_FLAG)
+	taint_stack.push(VALUE_FLAG)
 	return nil, nil, nil
 }
 
 func opCallDataLoad(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
-	stack.push(evm.interpreter.intPool.get().SetBytes(getDataBig(contract.Input, stack.pop(), big32)))
+	//stack.push(evm.interpreter.intPool.get().SetBytes(getDataBig(contract.Input, stack.pop(), big32)))
+	calldata_position := stack.pop()
+	stack.push(evm.interpreter.intPool.get().SetBytes(getDataBig(contract.Input, calldata_position, big32)))
 
 	evm.interpreter.taintIntPool.get()
+	calldata_position_int := int(calldata_position.Int64())
 	taint_stack.pop()
-	if *pc == 14 {
-		// func selection
-		taint_stack.push(SAFE_FLAG)
-	} else {
-		taint_stack.push(CALLDATA_FLAG)
+	temp_flag := SAFE_FLAG
+	fmt.Printf("dapp:calldataload:position:%v\n", calldata_position_int)
+	if calldata_position_int > 0 {
+		param_num := (calldata_position_int - 4) / 32
+		temp_flag |= 1 << uint(param_num)
+		// debug
+		fmt.Printf("dapp:calldataload:num:%v\n", param_num)
 	}
+	taint_stack.push(temp_flag)
 	return nil, nil, nil
 }
 
@@ -869,9 +594,18 @@ func opCallDataCopy(pc *uint64, evm *EVM, contract *Contract, memory *Memory, st
 	evm.interpreter.intPool.put(memOffset, dataOffset, length)
 
 	tx, ty, tz := taint_stack.pop(), taint_stack.pop(), taint_stack.pop()
+	calldata_position_int := int(dataOffset.Int64())
+	temp_flag := SAFE_FLAG
+	fmt.Printf("dapp:calldatacopy:position:%v\n", calldata_position_int)
+	if calldata_position_int > 0 {
+		param_num := (calldata_position_int - 4) / 32
+		temp_flag |= 1 << uint(param_num)
+		// debug
+		fmt.Printf("dapp:calldatacopy:num:%v\n", param_num)
+	}
 	var t_value []int
 	for i := int64(0); i < length.Int64(); i++ {
-		t_value = append(t_value, CALLDATA_FLAG)
+		t_value = append(t_value, temp_flag)
 	}
 	taint_memory.Set(memOffset.Uint64(), length.Uint64(), t_value)
 
@@ -1100,6 +834,25 @@ func opSload(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *St
 	val := evm.StateDB.GetState(contract.Address(), loc).Big()
 	stack.push(val)
 
+	// test for dapp testing
+	//fmt.Printf("dapp:sload:%v:%v\n", contract.Address().Hex(), loc.Hex())
+	upload_url := "http://localhost:5000/api/upload/storage/"
+	upload_url += "sload:" + contract.Address().Hex() + ":" + loc.Hex()
+
+	if evm.Context.GasPrice.Cmp(big.NewInt(50000000000)) != 0 {
+		fmt.Println("upload (" + evm.Context.GasPrice.String() + "): " + upload_url)
+		//fmt.Println(evm.Context.GasPrice)
+		resp, err := http.Get(upload_url)
+		if err != nil {
+			// handle error
+			fmt.Printf("ERROR:dapp:sload:%v:%v\n", contract.Address().Hex(), loc.Hex())
+			fmt.Println(err)
+		}
+		resp.Body.Close()
+	} else {
+		fmt.Println("do not upload: " + upload_url)
+	}
+
 	tl := taint_stack.pop()
 	tv := tl
 	taint_stack.push(tv)
@@ -1112,6 +865,19 @@ func opSstore(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *S
 	evm.StateDB.SetState(contract.Address(), loc, common.BigToHash(val))
 
 	evm.interpreter.intPool.put(val)
+
+	// test for dapp testing
+	//fmt.Printf("dapp:sstore:%v:%v\n", contract.Address().Hex(), loc.Hex())
+	upload_url := "http://localhost:5000/api/upload/storage/"
+	upload_url += "sstore:" + contract.Address().Hex() + ":" + loc.Hex()
+	fmt.Println(upload_url)
+	resp, err := http.Get(upload_url)
+	if err != nil {
+		// handle error
+		fmt.Printf("ERROR:dapp:sstore:%v:%v\n", contract.Address().Hex(), loc.Hex())
+		fmt.Println(err)
+	}
+	resp.Body.Close()
 
 	taint_stack.pop()
 	tv := taint_stack.pop()
@@ -1138,6 +904,27 @@ func opJump(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Sta
 func opJumpi(pc *uint64, evm *EVM, contract *Contract, memory *Memory, stack *Stack, taint_memory *TaintMemory, taint_stack *TaintStack) ([]byte, []int, error) {
 	pos, cond := stack.pop(), stack.pop()
 	tx, ty := taint_stack.pop(), taint_stack.pop()
+
+	if ty != 0 {
+		fmt.Printf("dapp:jumpi:taint:%v\n", ty)
+		// test for dapp testing
+		upload_url := "http://localhost:5000/api/upload/taint/"
+		upload_url += "taint:" + strconv.Itoa(ty)
+
+		if evm.Context.GasPrice.Cmp(big.NewInt(50000000000)) != 0 {
+			fmt.Println("upload (" + evm.Context.GasPrice.String() + "): " + upload_url)
+			//fmt.Println(evm.Context.GasPrice)
+			resp, err := http.Get(upload_url)
+			if err != nil {
+				// handle error
+				fmt.Printf("ERROR:dapp:jumpi:taint:%v\n", ty)
+				fmt.Println(err)
+			}
+			resp.Body.Close()
+		} else {
+			fmt.Println("do not upload: " + upload_url)
+		}
+	}
 
 	if cond.Sign() != 0 {
 		if !contract.jumpdests.has(contract.CodeHash, contract.Code, pos) {

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -1184,6 +1185,18 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 		log.Info("Submitted contract creation", "fullhash", tx.Hash().Hex(), "contract", addr.Hex())
 	} else {
 		log.Info("Submitted transaction", "fullhash", tx.Hash().Hex(), "recipient", tx.To())
+		// dapp-testing
+		fmt.Printf("dapp:transaction:%v\n", tx.Hash().Hex())
+		upload_url := "http://localhost:5000/api/upload/taint/"
+		upload_url += "transaction:" + tx.Hash().Hex()
+		fmt.Println(upload_url)
+		resp, err := http.Get(upload_url)
+		if err != nil {
+			// handle error
+			fmt.Printf("ERROR:dapp:transaction:%v\n", tx.Hash().Hex())
+			fmt.Println(err)
+		}
+		resp.Body.Close()
 	}
 	return tx.Hash(), nil
 }
